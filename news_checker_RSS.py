@@ -247,25 +247,36 @@ if st.session_state.current_input_method == "키워드로 Google News 검색":
         st.info("원하는 기사의 링크를 복사하여 'URL 직접 입력/분석' 탭에서 분석을 진행해주세요.")
 
 
-elif st.session_state.current_input_method == "URL 직접 입력":
+elif st.session_state.current_input_method == "URL 직접 입력": # input_method 대신 st.session_state.current_input_method 사용
     st.subheader("🔗 URL 직접 입력하여 분석하기")
-    url_direct_input = st.text_input("분석할 뉴스 기사의 전체 URL을 입력해주세요:", placeholder="예: https://www.example-news.com/news/article123", key="url_direct_input_main_field")
+    
+    # 👇 URL을 입력받아 'url_direct_input' 변수에 저장합니다.
+    url_direct_input = st.text_input(
+        "분석할 뉴스 기사의 전체 URL을 입력해주세요:", 
+        placeholder="예: https://www.example-news.com/news/article123", 
+        key="url_direct_input_main_field" # 이 key는 위젯 식별용입니다.
+    )
 
-    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_tab2"):
-        st.write("--- 버튼 클릭됨, 분석 로직 시작점 ---") # <<--- 이 줄 추가!
+    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_main_action"): # 버튼 key 이름은 이전과 동일하게 유지
+        st.write("--- 버튼 클릭됨, 분석 로직 시작점 ---") 
 
-        if not url_direct_input_tab2:
+        # 👇 여기서부터 모든 'url_direct_input_tab2'를 'url_direct_input'으로 변경합니다.
+        if not url_direct_input: 
             st.warning("분석할 기사의 URL을 입력해주세요.")
-            st.write("--- URL 없음 ---") # 디버깅
-        elif not (url_direct_input_tab2.startswith('http://') or url_direct_input_tab2.startswith('https://')):
+            st.write("--- URL 없음 ---") 
+        elif not (url_direct_input.startswith('http://') or url_direct_input.startswith('https://')):
             st.warning("올바른 URL 형식이 아닙니다. 'http://' 또는 'https://'로 시작해야 합니다.")
-            st.write("--- URL 형식 오류 ---") # 디버깅
+            st.write("--- URL 형식 오류 ---") 
         else:
-            st.write(f"--- URL 유효성 통과: {url_direct_input_tab2} ---") # 디버깅
-            st.info(f"입력하신 URL의 기사를 분석합니다: {url_direct_input_tab2}")
+            st.write(f"--- URL 유효성 통과: {url_direct_input} ---") 
+            
+            final_url_to_process = get_final_url(url_direct_input) # get_final_url 함수 호출 시에도 올바른 변수 사용
+            st.info(f"입력하신 URL의 기사를 분석합니다: {final_url_to_process}") # 여기서도 final_url_to_process 사용
+            
             try:
                 with st.spinner(f"기사를 가져와 AI가 분석 중입니다..."):
-                    article = Article(final_url_to_process, config=NEWS_CONFIG, language='ko')
+                    # final_url_to_process를 Article 객체에 전달해야 합니다.
+                    article = Article(final_url_to_process, config=NEWS_CONFIG, language='ko') 
                     article.download()
                     article.parse()
                     if not article.title or not article.text or len(article.text) < 50:
