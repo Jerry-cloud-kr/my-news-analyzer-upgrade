@@ -2,13 +2,13 @@ import streamlit as st
 import pandas as pd
 import os
 from newspaper import Article, Config # newspaper Config 추가
-# from sentence_transformers import SentenceTransformer, util # <<<<<<<<<<< 일단 주석 처리
-import openai # OpenAI 라이브러리
-from openai import OpenAI # OpenAI 클라이언트 클래스 임포트
+from sentence_transformers import SentenceTransformer, util # <<--- 주석 해제
+import openai 
+from openai import OpenAI 
 import google.generativeai as genai
-import feedparser # 키워드 검색 기능에 필요
-import requests # Naver 뉴스 원문 링크 추출에 필요
-from bs4 import BeautifulSoup # Naver 뉴스 원문 링크 추출에 필요
+import feedparser 
+import requests 
+from bs4 import BeautifulSoup 
 
 # --- OpenAI API Key 및 클라이언트 설정 (Secrets 사용) ---
 client_openai = None 
@@ -54,8 +54,25 @@ except Exception as e:
     st.error(f"Google AI API 키 설정 중 오류: {e}")
     st.stop()
 
+# --- URL 최종 목적지 확인 함수 ---
+@st.cache_data
+def get_final_url(url, timeout=10):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+        response.raise_for_status()
+        return response.url 
+    except requests.exceptions.RequestException as e:
+        print(f"최종 URL 요청 중 오류 ({url}): {e}")
+        return url 
+    except Exception as e:
+        print(f"최종 URL 확인 중 기타 오류 ({url}): {e}")
+        return url
+
 # --- Naver 뉴스 원문 링크 추출 함수 ---
-@st.cache_data # 결과 캐싱 (동일 URL에 대해 반복 호출 방지)
+@st.cache_data 
 def get_original_url_from_naver_news(naver_url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -64,18 +81,9 @@ def get_original_url_from_naver_news(naver_url):
         response = requests.get(naver_url, headers=headers, timeout=10)
         response.raise_for_status() 
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 일반적인 '기사원문' 링크 선택자 (Naver 구조 변경 시 업데이트 필요)
         original_link_tag = soup.select_one("a.media_end_head_origin_link_text")
-        
         if original_link_tag and original_link_tag.get('href'):
             return original_link_tag['href']
-        
-        # 추가적인 선택자 시도 (예시)
-        # press_logo = soup.select_one("div.press_logo img")
-        # if press_logo and press_logo.parent.name == 'a' and press_logo.parent.get('href'):
-        #     return press_logo.parent['href']
-            
         print(f"Naver '기사원문' 링크 자동 추출 실패: {naver_url}")
         return None 
     except requests.exceptions.RequestException as e:
@@ -129,25 +137,25 @@ def extract_keywords_gemini(article_text):
         st.warning("AI 키워드 추출 중 일시적인 오류가 발생했습니다.")
         return []
 
-# --- 유사도 측정 모델 로드 (일단 주석 처리) ---
-# model_similarity = None 
-# try:
-#     model_similarity = SentenceTransformer('all-MiniLM-L6-v2', device='cpu') 
-#     if model_similarity is None: 
-#         st.error("SentenceTransformer 모델 로드에 실패했으나 명시적 오류가 발생하지 않았습니다. 앱 실행을 중단합니다.")
-#         st.stop()
-# except Exception as e:
-#     st.error(f"SentenceTransformer 모델 로드 중 오류: {e}")
-#     st.error("팁: 이 오류는 보통 torch 또는 sentence-transformers 라이브러리 설치/호환성 문제입니다.")
-#     st.info("유사도 분석 기능 없이 앱을 계속 사용하시려면 코드에서 해당 모델 로드 부분을 다시 주석 처리해주세요.")
-#     st.stop()
+# --- 유사도 측정 모델 로드 (다시 활성화) ---
+model_similarity = None 
+try:
+    model_similarity = SentenceTransformer('all-MiniLM-L6-v2', device='cpu') 
+    if model_similarity is None: 
+        st.error("SentenceTransformer 모델 로드에 실패했으나 명시적 오류가 발생하지 않았습니다. 앱 실행을 중단합니다.")
+        st.stop()
+except Exception as e:
+    st.error(f"SentenceTransformer 모델 로드 중 오류: {e}")
+    st.error("팁: 이 오류는 보통 torch, torchvision, torchaudio 또는 sentence-transformers 라이브러리 설치/호환성 문제입니다. requirements.txt 파일 및 앱의 Python 버전을 확인해주세요.")
+    st.info("문제가 지속되면 유사도 분석 기능을 다시 비활성화해야 할 수 있습니다.")
+    st.stop()
 
 # --- 기사 분석 및 결과 표시 함수 ---
 def display_article_analysis_content(title_to_display, text_content, article_url):
     st.markdown("---")
     st.subheader("📰 기사 제목")
     st.write(f"**{title_to_display}**")
-    st.markdown(f"[🔗 기사 원문 바로가기]({article_url})", unsafe_allow_html=True) # 여기서 article_url은 최종 분석 대상 URL
+    st.markdown(f"[🔗 기사 원문 바로가기]({article_url})", unsafe_allow_html=True)
     st.markdown("---")
 
     # Gemini로 요약
@@ -172,9 +180,27 @@ def display_article_analysis_content(title_to_display, text_content, article_url
             st.success("✅ AI 추출 핵심 키워드가 제목에 잘 반영되어 있습니다.")
     st.markdown("---")
     
-    # 유사도 판단 (일단 주석 처리)
-    st.subheader("📊 제목-본문요약 유사도 판단 (현재 비활성화)")
-    st.info("ℹ️ 제목-본문 유사도 분석 기능은 현재 SentenceTransformer 모델 로드 오류로 인해 비활성화되어 있습니다.")
+    # 유사도 판단 (활성화)
+    st.subheader("📊 제목-본문요약 유사도 판단")
+    if model_similarity is not None: 
+        try:
+            embeddings = model_similarity.encode([title_to_display, body_summary], convert_to_tensor=True)
+            similarity = util.pytorch_cos_sim(embeddings[0], embeddings[1]).item()
+            
+            similarity_threshold_high = 0.65
+            similarity_threshold_mid = 0.40
+            if similarity > similarity_threshold_high: result_text, result_color = "✅ **높음**: 제목이 본문 요약 내용을 잘 반영하고 있습니다.", "green"
+            elif similarity > similarity_threshold_mid: result_text, result_color = "🟡 **중간**: 제목이 본문 요약과 다소 관련은 있지만, 내용이 약간 다를 수 있습니다.", "orange"
+            else: result_text, result_color = "⚠️ **낮음**: 제목이 본문 요약 내용과 많이 다를 수 있습니다. 낚시성이거나 다른 내용을 다룰 가능성을 확인해보세요.", "red"
+            
+            st.markdown(f"<span style='color:{result_color};'>{result_text}</span> (유사도 점수: {similarity:.2f})", unsafe_allow_html=True)
+            st.caption(f"참고: 유사도는 제목과 AI 요약문 간의 의미적 관계를 나타내며, 임계값(현재: 높음 {similarity_threshold_high}, 중간 {similarity_threshold_mid})에 따라 해석이 달라질 수 있습니다.")
+        except Exception as e_sim:
+            st.error(f"유사도 분석 중 오류 발생: {e_sim}")
+            print(f"유사도 분석 오류: {e_sim}")
+            st.info("ℹ️ 유사도 분석을 수행할 수 없습니다.")
+    else: # 이 메시지는 model_similarity 로드 실패 시에만 나타납니다.
+        st.info("ℹ️ 제목-본문 유사도 분석 기능은 SentenceTransformer 모델 로드 실패로 인해 현재 비활성화되어 있습니다.") 
     st.markdown("---")
 
     # GPT로 프레이밍 분석 (유지)
@@ -188,14 +214,18 @@ def display_article_analysis_content(title_to_display, text_content, article_url
 NEWS_CONFIG = Config()
 NEWS_CONFIG.browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 NEWS_CONFIG.request_timeout = 15
+NEWS_CONFIG.memoize_articles = False # 여러 URL 연속 분석 시 이전 결과 캐싱 방지 (선택적)
+NEWS_CONFIG.fetch_images = False # 이미지 다운로드 안함 (속도 향상)
+
 
 # --- Streamlit 앱 UI 구성 ---
 st.set_page_config(page_title="뉴스읽은척방지기 (하이브리드 AI)", page_icon="🧐")
 st.title("🧐 뉴스읽은척방지기")
 st.write("키워드 검색 또는 URL 직접 입력으로 뉴스 기사를 AI와 함께 분석해보세요!")
-st.caption("본문 요약 및 키워드 추출은 Gemini AI, 프레이밍 분석은 OpenAI GPT를 사용합니다.")
+st.caption("본문 요약 및 키워드 추출은 Gemini AI, 프레이밍 분석은 OpenAI GPT, 유사도 분석은 SentenceTransformer를 사용합니다.")
 
-input_tab1, input_tab2 = st.tabs(["🗂️ 키워드/RSS피드로 뉴스 검색/분석", "🔗 URL 직접 입력/분석"])
+
+tab1, tab2 = st.tabs(["🗂️ 키워드/RSS피드로 뉴스 검색/분석", "🔗 URL 직접 입력/분석"])
 
 with input_tab1:
     st.subheader("키워드 또는 RSS 피드 URL로 뉴스 찾아 분석하기")
@@ -258,14 +288,14 @@ with input_tab1:
         )
         if selected_title_tab1 and st.button("👆 선택한 뉴스 분석하기", key="analyze_selected_button_tab1", use_container_width=True):
             url_to_analyze_initially = st.session_state.article_options_for_analysis_tab1[selected_title_tab1]
-            st.info(f"선택한 기사 분석 중: {selected_title_tab1}")
+            # st.info(f"선택한 기사 분석 중: {selected_title_tab1}") # 분석 시작 시 스피너가 대신함
             
             actual_url_to_process = url_to_analyze_initially 
             if "news.naver.com" in url_to_analyze_initially:
-                with st.spinner("Naver 뉴스 기사 원문 링크를 찾는 중..."):
+                with st.spinner("Naver 뉴스 기사 원문 링크를 찾는 중... (시간이 다소 소요될 수 있습니다)"):
                     original_url = get_original_url_from_naver_news(url_to_analyze_initially)
                 if original_url:
-                    st.info(f"Naver 뉴스에서 추출된 원문 링크: {original_url}")
+                    st.info(f"Naver 뉴스에서 추출된 원문 링크로 분석합니다: {original_url}")
                     actual_url_to_process = original_url
                 else:
                     st.warning("Naver 뉴스에서 원문 링크를 추출하지 못했습니다. Naver 링크로 분석을 시도합니다.")
@@ -282,6 +312,8 @@ with input_tab1:
                         display_article_analysis_content(title_for_analysis, article.text, actual_url_to_process)
             except Exception as e:
                 st.error(f"선택한 기사 처리 중 오류 발생: {e}")
+                print(f"오류 URL: {url_to_analyze_initially} -> {actual_url_to_process}")
+
 
 with input_tab2:
     st.subheader("URL로 직접 뉴스 분석하기")
@@ -293,14 +325,14 @@ with input_tab2:
         elif not (url_direct_input_tab2.startswith('http://') or url_direct_input_tab2.startswith('https://')):
             st.warning("올바른 URL 형식이 아닙니다. 'http://' 또는 'https://'로 시작해야 합니다.")
         else:
-            st.info(f"입력하신 URL의 기사를 분석합니다: {url_direct_input_tab2}")
+            # st.info(f"입력하신 URL의 기사를 분석합니다: {url_direct_input_tab2}") # 스피너가 대신함
             
             actual_url_to_process = url_direct_input_tab2 
             if "news.naver.com" in url_direct_input_tab2:
-                with st.spinner("Naver 뉴스 기사 원문 링크를 찾는 중..."):
+                with st.spinner("Naver 뉴스 기사 원문 링크를 찾는 중... (시간이 다소 소요될 수 있습니다)"):
                     original_url = get_original_url_from_naver_news(url_direct_input_tab2)
                 if original_url:
-                    st.info(f"Naver 뉴스에서 추출된 원문 링크: {original_url}")
+                    st.info(f"Naver 뉴스에서 추출된 원문 링크로 분석합니다: {original_url}")
                     actual_url_to_process = original_url
                 else:
                     st.warning("Naver 뉴스에서 원문 링크를 추출하지 못했습니다. Naver 링크로 분석을 시도합니다.")
@@ -318,3 +350,8 @@ with input_tab2:
                 st.error(f"URL 기사 처리 중 오류 발생: {e}")
                 print(f"전체 오류: {e}") 
                 st.caption("URL을 확인하시거나, 다른 기사를 시도해보세요. 일부 웹사이트는 외부 접근을 통한 기사 수집을 허용하지 않을 수 있습니다.")
+
+# --- RSS 피드 목록 로드 함수 (현재 UI에서는 직접 사용하지 않음, 추후 활용 가능) ---
+# @st.cache_data 
+# def load_rss_feeds_from_csv(file_path="knews_rss.csv"): 
+# ... (이 함수는 현재 호출되지 않으므로, 필요 없다면 전체 삭제해도 무방합니다) ...
