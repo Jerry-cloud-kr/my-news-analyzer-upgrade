@@ -279,10 +279,27 @@ elif st.session_state.current_input_method == "URL 직접 입력": # input_metho
                     article = Article(final_url_to_process, config=NEWS_CONFIG, language='ko') 
                     article.download()
                     article.parse()
+                    # --- 디버깅 로그 추가 시작 ---
+                    st.markdown("--- newspaper3k 디버깅 정보 ---")
+                    st.write(f"**Article 객체 생성 시 사용된 URL:** `{final_url_to_process}`") # 이전에 final_url_to_process로 변경했었음
+                    st.write(f"**`article.download_state`:** {article.download_state} (2여야 성공)")
+                    
+                    if article.html:
+                        st.text_area("다운로드된 HTML 앞부분 (500자):", article.html[:500], height=150)
+                    else:
+                        st.write("다운로드된 HTML 내용이 없습니다.")
+                    
+                    st.write(f"**`article.title` (파싱 후):** {article.title}")
+                    st.write(f"**`len(article.text)` (파싱 후):** {len(article.text)}")
+                    if article.text:
+                        st.write(f"**`article.text` (파싱 후 앞 100자):** {article.text[:100].replace( : ,  ).replace( : ,  )}...")
+                    st.markdown("--- 디버깅 정보 끝 ---")
+                    # --- 디버깅 로그 추가 끝 ---
+
                     if not article.title or not article.text or len(article.text) < 50:
                         st.error("기사 제목이나 본문을 가져오지 못했거나 내용이 너무 짧습니다. 다른 URL을 시도해주세요.")
                     else:
-                        display_article_analysis_content(article.title, article.text, final_url_to_process)
+                        display_article_analysis_content(article.title, article.text, final_url_to_process) # final_url_to_process 사용
             except Exception as e:
                 st.error(f"URL 기사 처리 중 오류 발생: {e}")
                 print(f"전체 오류: {e}") 
