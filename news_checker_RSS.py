@@ -1,33 +1,35 @@
 import streamlit as st
-from newspaper import Article, Config
-from sentence_transformers import SentenceTransformer, util
-import openai
-from openai import OpenAI
+from newspaper import Article, Config # newspaper Config 추가
+from sentence_transformers import SentenceTransformer, util # <<--- 유사도 분석 활성화
+import openai 
+from openai import OpenAI 
 import google.generativeai as genai
-import feedparser
-import requests
+import feedparser 
+import requests 
 
 # --- API Key 및 클라이언트 설정 (Secrets 우선) ---
 # OpenAI
-client_openai = None
+client_openai = None 
 OPENAI_API_KEY_Direct_Placeholder = "YOUR_OPENAI_KEY_PLACEHOLDER" # 로컬 테스트 시 실제 키를 여기에!
 try:
     OPENAI_API_KEY_FROM_SECRETS = st.secrets["OPENAI_API_KEY"]
     if not OPENAI_API_KEY_FROM_SECRETS:
          st.error("⚠️ OpenAI API 키가 Streamlit Secrets에 설정되었으나 값이 비어있습니다.")
          st.stop()
-    client_openai = OpenAI(api_key=OPENAI_API_KEY_FROM_SECRETS)
-except KeyError:
+    client_openai = OpenAI(api_key=OPENAI_API_KEY_FROM_SECRETS) 
+except KeyError: # 로컬에서 st.secrets["OPENAI_API_KEY"]가 없을 때
+    # 사용자가 로컬 테스트를 위해 플레이스홀더에 실제 키를 입력했는지 확인
     if OPENAI_API_KEY_Direct_Placeholder == "YOUR_OPENAI_KEY_PLACEHOLDER" or not OPENAI_API_KEY_Direct_Placeholder:
-        st.error("OpenAI API 키를 Secrets에서 찾을 수 없습니다. 로컬 테스트 시 코드 상단 플레이스홀더에 실제 키를 입력해주세요.")
+        st.error("OpenAI API 키를 Secrets에서 찾을 수 없습니다. 로컬 테스트를 원하시면 코드 상단 OPENAI_API_KEY_Direct_Placeholder 값을 실제 키로 입력하거나, 앱 배포 후 Streamlit Community Cloud의 Secrets 설정을 확인하세요.")
         st.stop()
-    else:
-        st.warning("로컬 테스트용 OpenAI API 키가 코드에 직접 설정되어 있습니다. GitHub 푸시 전 반드시 Secrets 방식으로 변경하세요.", icon="❗")
+    else: # 로컬 테스트 시 실제 키가 플레이스홀더에 입력되었다고 가정
+        st.warning("로컬 테스트용 OpenAI API 키가 코드에 직접 설정되어 있습니다. GitHub 푸시 전 반드시 Secrets 방식으로 변경하거나 키를 삭제하세요.", icon="❗")
         client_openai = OpenAI(api_key=OPENAI_API_KEY_Direct_Placeholder)
 except Exception as e:
     st.error(f"OpenAI API 키/클라이언트 설정 오류: {e}")
     st.stop()
-if client_openai is None:
+
+if client_openai is None: # client_openai가 어떤 이유로든 초기화되지 않았다면 중단
     st.error("OpenAI 클라이언트 초기화 실패. API 키를 확인하세요.")
     st.stop()
 
@@ -39,12 +41,12 @@ try:
          st.error("⚠️ Google AI API 키가 Streamlit Secrets에 설정되었으나 값이 비어있습니다.")
          st.stop()
     genai.configure(api_key=GOOGLE_AI_API_KEY_FROM_SECRETS)
-except KeyError:
+except KeyError: # 로컬에서 st.secrets["GOOGLE_AI_API_KEY"]가 없을 때
     if GOOGLE_AI_API_KEY_Direct_Placeholder == "YOUR_GOOGLE_AI_KEY_PLACEHOLDER" or not GOOGLE_AI_API_KEY_Direct_Placeholder:
-        st.error("Google AI API 키를 Secrets에서 찾을 수 없습니다. 로컬 테스트 시 코드 상단 플레이스홀더에 실제 키를 입력해주세요.")
+        st.error("Google AI API 키를 Secrets에서 찾을 수 없습니다. 로컬 테스트를 원하시면 코드 상단의 GOOGLE_AI_API_KEY_Direct_Placeholder 값을 실제 키로 입력하거나, 앱 배포 후 Streamlit Community Cloud의 Secrets 설정을 확인하세요.")
         st.stop()
-    else:
-        st.warning("로컬 테스트용 Google AI API 키가 코드에 직접 설정되어 있습니다. GitHub 푸시 전 반드시 Secrets 방식으로 변경하세요.", icon="❗")
+    else: # 로컬 테스트 시 실제 키가 플레이스홀더에 입력되었다고 가정
+        st.warning("로컬 테스트용 Google AI API 키가 코드에 직접 설정되어 있습니다. GitHub 푸시 전 반드시 Secrets 방식으로 변경하거나 키를 삭제하세요.", icon="❗")
         genai.configure(api_key=GOOGLE_AI_API_KEY_Direct_Placeholder)
 except Exception as e:
     st.error(f"Google AI API 키 설정 오류: {e}")
@@ -56,11 +58,11 @@ def get_final_url(url, timeout=10):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     try:
         response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
-        response.raise_for_status()
+        response.raise_for_status() # 오류 발생 시 예외 발생
         return response.url
     except requests.exceptions.RequestException as e:
         print(f"최종 URL 요청 중 오류 ({url}): {e}") # 콘솔 로그는 유지
-        return url
+        return url # 실패 시 원래 URL 반환 (newspaper3k가 다시 시도)
     except Exception as e:
         print(f"최종 URL 확인 중 기타 오류 ({url}): {e}") # 콘솔 로그는 유지
         return url
@@ -104,19 +106,20 @@ def extract_keywords_gemini(article_text):
         return []
 
 # --- 유사도 측정 모델 로드 (활성화) ---
-model_similarity = None
+model_similarity = None 
 try:
-    model_similarity = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+    model_similarity = SentenceTransformer('all-MiniLM-L6-v2', device='cpu') 
     if model_similarity:
-        print("SentenceTransformer 모델 로드 성공!")
-    else:
+        print("SentenceTransformer 모델 로드 성공!") 
+    else: 
+        # 이 경우는 거의 발생하지 않지만, 만약을 위해 남겨둡니다.
         st.error("SentenceTransformer 모델 로드에 실패했으나 명시적 오류가 발생하지 않았습니다. 앱 실행을 중단합니다.")
-        st.stop()
+        st.stop() 
 except Exception as e:
     st.error(f"SentenceTransformer 모델 로드 중 심각한 오류 발생: {e}")
     st.error("팁: 이 오류는 보통 torch, torchvision, torchaudio 또는 sentence-transformers 라이브러리 설치/호환성 문제입니다.")
-    st.error("앱의 Python 버전(Streamlit Cloud 설정), requirements.txt (torch 포함 여부), packages.txt (lxml 시스템 의존성)를 확인해주세요.")
-    st.stop()
+    st.error("앱의 Python 버전(Streamlit Cloud 설정), requirements.txt (torch 포함 여부), packages.txt 등을 확인해주세요.")
+    st.stop() # 모델 로드 실패 시 앱 중단
 
 # --- 기사 분석 및 결과 표시 함수 ---
 def display_article_analysis_content(title_to_display, text_content, article_url):
@@ -151,7 +154,7 @@ def display_article_analysis_content(title_to_display, text_content, article_url
     
     # 유사도 판단 (활성화)
     st.subheader("📊 제목-본문요약 유사도 판단")
-    if model_similarity is not None:
+    if model_similarity is not None: 
         try:
             embeddings = model_similarity.encode([title_to_display, body_summary], convert_to_tensor=True)
             similarity = util.pytorch_cos_sim(embeddings[0], embeddings[1]).item()
@@ -167,8 +170,8 @@ def display_article_analysis_content(title_to_display, text_content, article_url
             st.error(f"유사도 분석 중 오류 발생: {e_sim}")
             print(f"유사도 분석 오류: {e_sim}")
             st.info("ℹ️ 유사도 분석을 수행할 수 없습니다.")
-    else:
-        st.info("ℹ️ 제목-본문 유사도 분석 기능은 SentenceTransformer 모델 로드 문제로 인해 현재 실행되지 않았습니다.")
+    else: 
+        st.info("ℹ️ 제목-본문 유사도 분석 기능은 SentenceTransformer 모델 로드 문제로 인해 현재 실행되지 않았습니다.") 
     st.markdown("---")
 
     # GPT로 프레이밍 분석 (유지)
@@ -183,8 +186,8 @@ def display_article_analysis_content(title_to_display, text_content, article_url
 NEWS_CONFIG = Config()
 NEWS_CONFIG.browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 NEWS_CONFIG.request_timeout = 15
-NEWS_CONFIG.memoize_articles = False
-NEWS_CONFIG.fetch_images = False
+NEWS_CONFIG.memoize_articles = False 
+NEWS_CONFIG.fetch_images = False 
 
 # --- Streamlit 앱 UI 구성 ---
 st.set_page_config(page_title="뉴스읽은척방지기 (AI)", page_icon="🧐")
@@ -196,80 +199,89 @@ st.caption("본문 요약 및 키워드 추출은 Gemini AI, 프레이밍 분석
 if 'current_input_method' not in st.session_state:
     st.session_state.current_input_method = "키워드로 Google News 검색"
 
-selected_input_method = st.radio(
+selected_input_method_on_page = st.radio( # 변수명 변경
     "뉴스 가져오는 방법 선택:",
     ("키워드로 Google News 검색", "URL 직접 입력"),
-    key="input_method_selector_main",
+    key="input_method_selector_radio_key", # 고유한 key
     horizontal=True,
     index=("키워드로 Google News 검색", "URL 직접 입력").index(st.session_state.current_input_method)
 )
 
-if selected_input_method != st.session_state.current_input_method:
-    st.session_state.current_input_method = selected_input_method
-    # 검색 결과가 남아있는 것을 방지하기 위해 이전 검색 결과 초기화
-    if 'fetched_articles_for_selection_display' in st.session_state:
+# 라디오 버튼 선택 변경 시 session_state 업데이트 및 rerun
+if selected_input_method_on_page != st.session_state.current_input_method:
+    st.session_state.current_input_method = selected_input_method_on_page
+    if 'fetched_articles_for_selection_display' in st.session_state: # 검색 결과 초기화
         del st.session_state.fetched_articles_for_selection_display
-    st.rerun() # 입력 방식 변경 시 앱을 한번 재실행하여 UI를 깨끗하게 정리
+    if 'selected_article_to_show_url' in st.session_state: # 선택된 URL 표시 초기화
+        del st.session_state.selected_article_to_show_url
+    st.rerun() # UI를 깨끗하게 정리하고 라디오 버튼 선택 즉시 반영
 
 if st.session_state.current_input_method == "키워드로 Google News 검색":
     st.subheader("🗂️ 키워드로 뉴스 찾아보기")
-    search_query = st.text_input("검색할 키워드를 입력하세요:", placeholder="예: 글로벌 경제 동향", key="keyword_search_field_main")
+    search_query_keyword_tab = st.text_input("검색할 키워드를 입력하세요:", placeholder="예: 글로벌 경제 동향", key="keyword_search_input_final")
 
-    if st.button("🔍 뉴스 검색", key="keyword_search_action_button_main", use_container_width=True):
-        if not search_query:
+    if st.button("🔍 뉴스 검색", key="keyword_search_action_button_final", use_container_width=True):
+        if not search_query_keyword_tab:
             st.warning("검색어를 입력해주세요.")
         else:
             st.session_state.fetched_articles_for_selection_display = None 
-            google_news_rss_url = f"https://news.google.com/rss/search?q={search_query}&hl=ko&gl=KR&ceid=KR:ko"
-            articles_to_show_in_selectbox = {} 
+            google_news_rss_url = f"https://news.google.com/rss/search?q={search_query_keyword_tab}&hl=ko&gl=KR&ceid=KR:ko"
+            temp_articles_list = [] 
             try:
                 custom_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                with st.spinner(f"'{search_query}' 관련 뉴스를 Google News에서 검색하고 링크를 확인 중..."):
+                with st.spinner(f"'{search_query_keyword_tab}' 관련 뉴스를 Google News에서 검색하고 링크를 확인 중..."):
                     feed = feedparser.parse(google_news_rss_url, agent=custom_user_agent)
                     if feed.entries:
                         count = 0
-                        temp_articles_list = [] # 임시 리스트
                         for i, entry in enumerate(feed.entries[:15]): 
                             if hasattr(entry, 'title') and hasattr(entry, 'link'):
                                 final_url = get_final_url(entry.link) 
                                 if final_url:
-                                    display_title_option = f"{i+1}. {entry.title}"
-                                    # st.session_state에 저장할 때는 (제목, URL) 튜플이나 간단한 딕셔너리가 좋음
-                                    temp_articles_list.append({'display': display_title_option, 'title': entry.title, 'url': final_url})
+                                    # selectbox에 표시될 내용, 원본 제목, 최종 URL 저장
+                                    temp_articles_list.append({
+                                        'display_option': f"{i+1}. {entry.title[:80]}{'...' if len(entry.title) > 80 else ''}", 
+                                        'original_title': entry.title, 
+                                        'url': final_url
+                                    })
                                     count +=1
                         if temp_articles_list:
-                             st.success(f"'{search_query}' 관련 뉴스 {count}건의 링크를 확인했습니다.")
+                             st.success(f"'{search_query_keyword_tab}' 관련 뉴스 {count}건의 링크를 확인했습니다.")
                              st.session_state.fetched_articles_for_selection_display = temp_articles_list
                         else:
-                            st.warning(f"'{search_query}' 관련 Google News에서 유효한 기사 링크를 찾을 수 없거나, 기사 형식이 올바르지 않습니다.")
+                            st.warning(f"'{search_query_keyword_tab}' 관련 Google News에서 유효한 기사 링크를 찾을 수 없거나, 기사 형식이 올바르지 않습니다.")
                     else:
-                        st.warning(f"'{search_query}' 관련 Google News에서 기사를 가져오지 못했습니다. (HTTP Status: {feed.get('status', 'N/A')})")
+                        st.warning(f"'{search_query_keyword_tab}' 관련 Google News에서 기사를 가져오지 못했습니다. (HTTP Status: {feed.get('status', 'N/A')})")
             except Exception as e:
                 st.error(f"뉴스 검색 중 오류 발생: {e}")
             
             if not ('fetched_articles_for_selection_display' in st.session_state and st.session_state.fetched_articles_for_selection_display):
-                if 'fetched_articles_for_selection_display' in st.session_state: # 실패 시 확실히 지움
+                if 'fetched_articles_for_selection_display' in st.session_state: 
                     del st.session_state.fetched_articles_for_selection_display
     
     if 'fetched_articles_for_selection_display' in st.session_state and st.session_state.fetched_articles_for_selection_display:
         st.markdown("---")
         
-        # selectbox 옵션을 생성 (표시용 제목만)
-        selectbox_options = ["선택하세요..."] + [item['display'] for item in st.session_state.fetched_articles_for_selection_display]
+        selectbox_options = ["선택하세요..."] + [item['display_option'] for item in st.session_state.fetched_articles_for_selection_display]
         
+        if 'selected_article_display_title_key' not in st.session_state: # 초기화
+            st.session_state.selected_article_display_title_key = selectbox_options[0]
+
         selected_display_title_option = st.selectbox(
             "확인할 기사 제목을 선택하세요 (선택 시 아래 URL이 표시됩니다):",
             options=selectbox_options,
-            index=0, 
-            key="select_article_to_view_url_field_main" 
+            index=selectbox_options.index(st.session_state.selected_article_display_title_key), # 선택 유지
+            key="select_article_to_view_url_field_final" 
         )
+        # selectbox 변경 시 st.session_state 업데이트
+        if selected_display_title_option != st.session_state.selected_article_display_title_key:
+            st.session_state.selected_article_display_title_key = selected_display_title_option
+            st.rerun() # URL 표시를 즉시 업데이트하기 위해 rerun
 
-        if selected_display_title_option and selected_display_title_option != "선택하세요...":
-            # 선택된 표시용 제목으로 전체 기사 정보(URL 포함)를 찾음
-            selected_article_data = next((item for item in st.session_state.fetched_articles_for_selection_display if item['display'] == selected_display_title_option), None)
+        if st.session_state.selected_article_display_title_key and st.session_state.selected_article_display_title_key != "선택하세요...":
+            selected_article_data = next((item for item in st.session_state.fetched_articles_for_selection_display if item['display_option'] == st.session_state.selected_article_display_title_key), None)
             
             if selected_article_data:
-                st.markdown(f"**선택된 기사:** {selected_article_data['title']}") # 원본 제목 사용
+                st.markdown(f"**선택된 기사:** {selected_article_data['original_title']}") 
                 st.markdown(f"**해당 기사 원문 URL (아래 주소를 복사하세요):**")
                 st.code(selected_article_data['url']) 
                 st.info("👆 위 URL을 복사하여 'URL 직접 입력' 탭에 붙여넣고 분석을 시작하세요.")
@@ -280,10 +292,10 @@ elif st.session_state.current_input_method == "URL 직접 입력":
     url_direct_input_field_val = st.text_input( 
         "분석할 뉴스 기사의 전체 URL을 입력해주세요:", 
         placeholder="예: https://www.example-news.com/news/article123", 
-        key="url_direct_input_field_main_key" 
+        key="url_direct_input_field_main_key_final" 
     )
 
-    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_main_action_key_final"): 
+    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_main_action_key_final_action"): 
         if not url_direct_input_field_val:
             st.warning("분석할 기사의 URL을 입력해주세요.")
         elif not (url_direct_input_field_val.startswith('http://') or url_direct_input_field_val.startswith('https://')):
