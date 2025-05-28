@@ -1,16 +1,16 @@
 import streamlit as st
-from newspaper import Article, Config # newspaper Config 추가
-from sentence_transformers import SentenceTransformer, util # <<--- 유사도 분석 활성화
-import openai 
-from openai import OpenAI 
+from newspaper import Article, Config
+from sentence_transformers import SentenceTransformer, util
+import openai
+from openai import OpenAI
 import google.generativeai as genai
-import feedparser 
-import requests 
+import feedparser
+import requests
 
-# --- API Key 및 클라이언트 설정 (Secrets 우선) ---
-# OpenAI
+# --- API Key 및 클라이언트 설정 (이전 코드와 동일하게 유지) ---
 client_openai = None 
 OPENAI_API_KEY_Direct_Placeholder = "YOUR_OPENAI_KEY_PLACEHOLDER" 
+# ... (OpenAI API 키 설정 로직 전체 복사) ...
 try:
     OPENAI_API_KEY_FROM_SECRETS = st.secrets["OPENAI_API_KEY"]
     if not OPENAI_API_KEY_FROM_SECRETS:
@@ -31,7 +31,6 @@ if client_openai is None:
     st.error("OpenAI 클라이언트 초기화 실패. API 키를 확인하세요.")
     st.stop()
 
-# Google AI (Gemini)
 GOOGLE_AI_API_KEY_Direct_Placeholder = "YOUR_GOOGLE_AI_KEY_PLACEHOLDER" 
 try:
     GOOGLE_AI_API_KEY_FROM_SECRETS = st.secrets["GOOGLE_AI_API_KEY"]
@@ -51,7 +50,7 @@ except Exception as e:
     st.stop()
 
 # --- Helper Functions ---
-@st.cache_data # 동일 URL 반복 요청 방지
+@st.cache_data
 def get_final_url(url, timeout=10):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     try:
@@ -65,8 +64,9 @@ def get_final_url(url, timeout=10):
         print(f"최종 URL 확인 중 기타 오류 ({url}): {e}")
         return url
 
-# --- AI 기능 함수들 ---
+# --- AI 기능 함수들 (이전 코드와 동일하게 유지) ---
 def summarize_text_gemini(text_content):
+    # ... (이전 summarize_text_gemini 함수 내용 그대로) ...
     model = genai.GenerativeModel(model_name='gemini-1.5-flash-latest', system_instruction="너는 뉴스 기사의 핵심 내용을 객관적으로 요약하는 AI야.")
     prompt = f"다음 뉴스 기사 본문을 객관적인 사실에 기반하여 핵심 내용 중심으로 요약해 주십시오. 요약에는 주요 인물, 발생한 사건, 중요한 발언, 그리고 사건의 배경 정보가 포함되어야 합니다. 주관적인 해석, 평가, 또는 기사에 명시적으로 드러나지 않은 추론은 배제하고, 사실 관계를 명확히 전달하는 데 집중해 주십시오. 분량은 한국어 기준으로 약 3~5문장 (또는 100~150 단어) 정도로 간결하게 작성해 주십시오.\n\n기사:\n{text_content}"
     try:
@@ -78,6 +78,7 @@ def summarize_text_gemini(text_content):
         return "요약 생성에 실패했습니다."
 
 def detect_bias_openai(title, text_content):
+    # ... (이전 detect_bias_openai 함수 내용 그대로) ...
     prompt = f"다음은 뉴스 제목과 본문입니다. 제목이 본문 내용을 충분히 반영하고 있는지, 중요한 맥락이나 인물의 입장이 왜곡되거나 누락되었는지 판단해줘.\n\n제목: {title}\n본문: {text_content}\n\n분석 결과를 간단히 3~5줄로 정리해줘."
     try:
         completion = client_openai.chat.completions.create(model="gpt-4", messages=[{"role": "system", "content": "너는 공정한 뉴스 프레이밍 분석 도우미야."}, {"role": "user", "content": prompt}])
@@ -88,6 +89,7 @@ def detect_bias_openai(title, text_content):
         return "프레이밍 분석에 실패했습니다."
 
 def extract_keywords_gemini(article_text):
+    # ... (이전 extract_keywords_gemini 함수 내용 그대로) ...
     model = genai.GenerativeModel(model_name='gemini-1.5-flash-latest', system_instruction="You are an AI assistant specialized in extracting the most important keywords from news articles. Keywords should be nouns or core noun phrases. Respond only with the keywords, separated by commas.")
     user_prompt = f"다음 뉴스 기사 본문에서 가장 중요한 핵심 키워드를 5개만 추출하여, 각 키워드를 쉼표(,)로 구분한 하나의 문자열로 응답해주세요. 다른 설명이나 문장은 포함하지 마세요.\n\n예시 응답:\n키워드1,핵심 단어,세번째 키워드,중요 개념,마지막\n\n기사 본문:\n{article_text}"
     try:
@@ -106,28 +108,27 @@ def extract_keywords_gemini(article_text):
 # --- 유사도 측정 모델 로드 (활성화) ---
 model_similarity = None 
 try:
-    # CPU에서 모델 로드 시도
     model_similarity = SentenceTransformer('all-MiniLM-L6-v2', device='cpu') 
     if model_similarity:
-        print("SentenceTransformer 모델 로드 성공!") # 콘솔에 로드 성공 메시지
+        print("SentenceTransformer 모델 로드 성공!") 
     else: 
         st.error("SentenceTransformer 모델 로드에 실패했으나 명시적 오류가 발생하지 않았습니다. 앱 실행을 중단합니다.")
         st.stop()
 except Exception as e:
     st.error(f"SentenceTransformer 모델 로드 중 심각한 오류 발생: {e}")
-    st.error("이 오류는 보통 torch, torchvision, torchaudio 또는 sentence-transformers 라이브러리 설치/호환성 문제입니다.")
+    st.error("팁: 이 오류는 보통 torch, torchvision, torchaudio 또는 sentence-transformers 라이브러리 설치/호환성 문제입니다.")
     st.error("앱의 Python 버전(Streamlit Cloud 설정), requirements.txt (torch 포함 여부), packages.txt (lxml 시스템 의존성)를 확인해주세요.")
     st.stop()
 
-# --- 기사 분석 및 결과 표시 함수 ---
+# --- 기사 분석 및 결과 표시 함수 (이전 코드와 동일하게 유지) ---
 def display_article_analysis_content(title_to_display, text_content, article_url):
+    # ... (이전 display_article_analysis_content 함수 내용 그대로, 유사도 분석 포함) ...
     st.markdown("---")
     st.subheader("📰 기사 제목")
     st.write(f"**{title_to_display}**")
     st.markdown(f"[🔗 기사 원문 바로가기]({article_url})", unsafe_allow_html=True)
     st.markdown("---")
 
-    # Gemini로 요약
     st.subheader("🧾 본문 요약 (by Gemini AI)")
     with st.expander("⚠️ AI 요약에 대한 중요 안내 (클릭하여 확인)", expanded=False):
         st.markdown(""" **주의: AI 기반 요약 (Gemini)**\n\n* 본 요약은 Gemini 모델을 통해 생성되었으며, 기사의 모든 내용을 완벽하게 반영하지 못할 수 있습니다.\n* AI는 학습 데이터의 한계나 요약 과정의 특성으로 인해 때때로 부정확한 내용을 전달하거나 중요한 내용을 생략할 수 있습니다.\n* 제공된 요약은 기사의 핵심 내용을 빠르게 파악하기 위한 참고 자료로만 활용해주십시오.\n* 기사의 전체적인 맥락과 정확한 정보 확인을 위해서는 반드시 원문 기사를 함께 읽어보시는 것이 중요하며, 최종적인 내용에 대한 판단은 사용자의 책임입니다. """)
@@ -136,7 +137,6 @@ def display_article_analysis_content(title_to_display, text_content, article_url
     else: st.write(body_summary)
     st.markdown("---")
 
-    # Gemini로 키워드 추출 및 비교
     st.subheader("🔍 AI 추출 주요 키워드와 제목 비교 (by Gemini AI)")
     extracted_keywords = extract_keywords_gemini(text_content)
     if not extracted_keywords:
@@ -150,9 +150,8 @@ def display_article_analysis_content(title_to_display, text_content, article_url
             st.success("✅ AI 추출 핵심 키워드가 제목에 잘 반영되어 있습니다.")
     st.markdown("---")
     
-    # 유사도 판단 (활성화)
     st.subheader("📊 제목-본문요약 유사도 판단")
-    if model_similarity is not None: # 모델이 성공적으로 로드되었는지 확인
+    if model_similarity is not None: 
         try:
             embeddings = model_similarity.encode([title_to_display, body_summary], convert_to_tensor=True)
             similarity = util.pytorch_cos_sim(embeddings[0], embeddings[1]).item()
@@ -172,7 +171,6 @@ def display_article_analysis_content(title_to_display, text_content, article_url
         st.info("ℹ️ 제목-본문 유사도 분석 기능은 SentenceTransformer 모델 로드 문제로 인해 현재 실행되지 않았습니다.") 
     st.markdown("---")
 
-    # GPT로 프레이밍 분석 (유지)
     st.subheader("🕵️ 프레이밍 분석 결과 (by GPT)")
     with st.expander("⚠️ AI 프레이밍 분석 주의사항 (클릭하여 확인)"):
         st.markdown(""" **주의: AI 기반 프레이밍 분석 (GPT)**\n\n* 본 분석은 GPT 모델에 의해 수행되었으며, 완벽성을 보장하지 않습니다.\n* AI는 데이터와 학습 방식에 따라 편향된 결과를 제시할 수도 있습니다.\n* 제공된 분석은 참고 자료로 활용하시고, 최종적인 판단은 사용자의 책임하에 이루어져야 합니다. """)
@@ -193,85 +191,73 @@ st.title("🧐 뉴스읽은척방지기")
 st.write("키워드 검색 또는 URL 직접 입력으로 뉴스 기사를 AI와 함께 분석해보세요!")
 st.caption("본문 요약 및 키워드 추출은 Gemini AI, 프레이밍 분석은 OpenAI GPT, 유사도 분석은 SentenceTransformer를 사용합니다.")
 
-# 입력 방식 선택
-input_method = st.radio(
+input_method_options = ("키워드로 Google News 검색", "URL 직접 입력")
+if 'current_input_method' not in st.session_state:
+    st.session_state.current_input_method = input_method_options[0] # 기본값 설정
+
+st.session_state.current_input_method = st.radio(
     "뉴스 가져오는 방법 선택:",
-    ("키워드로 Google News 검색", "URL 직접 입력"),
-    key="input_method_main_radio", # 고유한 key 부여
-    horizontal=True
+    options=input_method_options,
+    key="input_method_selector", # key 변경
+    horizontal=True,
+    index=input_method_options.index(st.session_state.current_input_method) # 선택 유지
 )
 
-if input_method == "키워드로 Google News 검색":
-    st.subheader("🗂️ 키워드로 뉴스 찾아 분석하기")
-    search_query = st.text_input("검색할 키워드를 입력하세요:", placeholder="예: 글로벌 경제 동향", key="keyword_search_main_input")
+if st.session_state.current_input_method == "키워드로 Google News 검색":
+    st.subheader("🗂️ 키워드로 뉴스 찾아보기") # 헤더 변경
+    search_query = st.text_input("검색할 키워드를 입력하세요:", placeholder="예: 글로벌 경제 동향", key="keyword_search_input_main")
 
     if st.button("🔍 뉴스 검색", key="search_button_main_action", use_container_width=True):
         if not search_query:
             st.warning("검색어를 입력해주세요.")
         else:
-            st.session_state.article_options = None 
+            st.session_state.article_options_display = None # 이전 결과 초기화
             google_news_rss_url = f"https://news.google.com/rss/search?q={search_query}&hl=ko&gl=KR&ceid=KR:ko"
-            article_options = {}
+            fetched_articles_for_display = [] # 여기에 (제목, 최종 URL) 튜플 저장
             try:
                 custom_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                with st.spinner(f"'{search_query}' 관련 뉴스를 Google News에서 검색 중..."):
+                with st.spinner(f"'{search_query}' 관련 뉴스를 Google News에서 검색하고 링크를 확인 중..."):
                     feed = feedparser.parse(google_news_rss_url, agent=custom_user_agent)
-                if feed.entries:
-                    for entry in feed.entries[:30]: 
-                        if hasattr(entry, 'title') and hasattr(entry, 'link'):
-                            article_options[entry.title] = entry.link
-                    if article_options:
-                         st.success(f"'{search_query}' 관련 뉴스 {len(article_options)}건을 찾았습니다.")
+                    if feed.entries:
+                        for entry in feed.entries[:10]: # 가져올 기사 수 줄여서 테스트 (예: 10개)
+                            if hasattr(entry, 'title') and hasattr(entry, 'link'):
+                                final_url = get_final_url(entry.link) # 각 링크의 최종 목적지 확인
+                                if final_url: # 최종 URL이 있을 경우에만 추가
+                                    fetched_articles_for_display.append({"title": entry.title, "url": final_url})
+                        if fetched_articles_for_display:
+                             st.success(f"'{search_query}' 관련 뉴스 {len(fetched_articles_for_display)}건을 찾았습니다.")
+                        else:
+                            st.warning(f"'{search_query}' 관련 Google News에서 유효한 기사 링크를 찾을 수 없거나, 기사 형식이 올바르지 않습니다.")
                     else:
-                        st.warning(f"'{search_query}' 관련 Google News에서 기사를 찾을 수 없거나, 기사 형식이 올바르지 않습니다.")
-                else:
-                    st.warning(f"'{search_query}' 관련 Google News에서 기사를 가져오지 못했습니다. (HTTP Status: {feed.get('status', 'N/A')})")
+                        st.warning(f"'{search_query}' 관련 Google News에서 기사를 가져오지 못했습니다. (HTTP Status: {feed.get('status', 'N/A')})")
             except Exception as e:
                 st.error(f"뉴스 검색 중 오류 발생: {e}")
             
-            if article_options:
-                st.session_state.article_options = article_options # session_state 키 단순화
+            if fetched_articles_for_display:
+                st.session_state.article_options_display = fetched_articles_for_display
             else: 
-                if 'article_options' in st.session_state:
-                    del st.session_state.article_options
+                if 'article_options_display' in st.session_state:
+                    del st.session_state.article_options_display
     
-    if 'article_options' in st.session_state and st.session_state.article_options:
-        selected_title = st.selectbox(
-            "분석할 기사를 선택하세요:",
-            options=list(st.session_state.article_options.keys()),
-            index=None,
-            placeholder="목록에서 기사를 선택하세요...",
-            key="searched_article_selectbox_main_select" # 고유한 key 부여
-        )
-        if selected_title and st.button("👆 선택한 뉴스 분석하기", key="analyze_searched_button_main_action", use_container_width=True):
-            initial_url_from_rss = st.session_state.article_options[selected_title]
-            final_url_to_process = get_final_url(initial_url_from_rss)
-            
-            st.info(f"선택한 기사 분석 중: {selected_title} (URL: {final_url_to_process})")
-            try:
-                with st.spinner(f"'{selected_title}' 기사를 가져와 AI가 분석 중입니다..."):
-                    article = Article(final_url_to_process, config=NEWS_CONFIG, language='ko') 
-                    article.download()
-                    article.parse()
-                    if not article.text or len(article.text) < 50:
-                        st.error(f"'{selected_title}' 기사의 본문 내용을 충분히 가져오지 못했습니다. (URL: {final_url_to_process})")
-                    else:
-                        title_for_analysis = article.title if article.title else selected_title 
-                        display_article_analysis_content(title_for_analysis, article.text, final_url_to_process)
-            except Exception as e:
-                st.error(f"선택한 기사 처리 중 오류 발생: {e}")
-                print(f"오류 URL: {initial_url_from_rss} -> {final_url_to_process}")
+    if 'article_options_display' in st.session_state and st.session_state.article_options_display:
+        st.markdown("---")
+        st.write("👇 분석할 기사의 원문 링크를 클릭하여 내용을 확인 후, 'URL 직접 입력/분석' 탭에 붙여넣어 분석해주세요.")
+        for item in st.session_state.article_options_display:
+            st.markdown(f"- [{item['title']}]({item['url']})")
+        st.info("원하는 기사의 링크를 복사하여 'URL 직접 입력/분석' 탭에서 분석을 진행해주세요.")
 
-elif input_method == "URL 직접 입력":
+
+elif st.session_state.current_input_method == "URL 직접 입력":
     st.subheader("🔗 URL 직접 입력하여 분석하기")
     url_direct_input = st.text_input("분석할 뉴스 기사의 전체 URL을 입력해주세요:", placeholder="예: https://www.example-news.com/news/article123", key="url_direct_input_main_field")
 
-    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_main_action"): # 고유한 key 부여
+    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_main_action"): 
         if not url_direct_input:
             st.warning("분석할 기사의 URL을 입력해주세요.")
         elif not (url_direct_input.startswith('http://') or url_direct_input.startswith('https://')):
             st.warning("올바른 URL 형식이 아닙니다. 'http://' 또는 'https://'로 시작해야 합니다.")
         else:
+            # URL 직접 입력 시에도 get_final_url을 거치도록 하여 일관성 유지 (단축 URL 등 처리)
             final_url_to_process = get_final_url(url_direct_input) 
             st.info(f"입력하신 URL의 기사를 분석합니다: {final_url_to_process}")
             try:
@@ -287,8 +273,3 @@ elif input_method == "URL 직접 입력":
                 st.error(f"URL 기사 처리 중 오류 발생: {e}")
                 print(f"전체 오류: {e}") 
                 st.caption("URL을 확인하시거나, 다른 기사를 시도해보세요. 일부 웹사이트는 외부 접근을 통한 기사 수집을 허용하지 않을 수 있습니다.")
-
-# --- CSV 로드 관련 함수 (현재 UI에서 직접 사용 안 함) ---
-# @st.cache_data 
-# def load_rss_feeds_from_csv(file_path="knews_rss.csv"): 
-# ... (이 함수는 현재 호출되지 않으므로, 필요 없다면 전체 삭제해도 무방합니다) ...
