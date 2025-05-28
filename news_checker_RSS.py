@@ -251,15 +251,18 @@ elif st.session_state.current_input_method == "URL 직접 입력":
     st.subheader("🔗 URL 직접 입력하여 분석하기")
     url_direct_input = st.text_input("분석할 뉴스 기사의 전체 URL을 입력해주세요:", placeholder="예: https://www.example-news.com/news/article123", key="url_direct_input_main_field")
 
-    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_main_action"): 
-        if not url_direct_input:
+    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_tab2"):
+        st.write("--- 버튼 클릭됨, 분석 로직 시작점 ---") # <<--- 이 줄 추가!
+
+        if not url_direct_input_tab2:
             st.warning("분석할 기사의 URL을 입력해주세요.")
-        elif not (url_direct_input.startswith('http://') or url_direct_input.startswith('https://')):
+            st.write("--- URL 없음 ---") # 디버깅
+        elif not (url_direct_input_tab2.startswith('http://') or url_direct_input_tab2.startswith('https://')):
             st.warning("올바른 URL 형식이 아닙니다. 'http://' 또는 'https://'로 시작해야 합니다.")
+            st.write("--- URL 형식 오류 ---") # 디버깅
         else:
-            # URL 직접 입력 시에도 get_final_url을 거치도록 하여 일관성 유지 (단축 URL 등 처리)
-            final_url_to_process = get_final_url(url_direct_input) 
-            st.info(f"입력하신 URL의 기사를 분석합니다: {final_url_to_process}")
+            st.write(f"--- URL 유효성 통과: {url_direct_input_tab2} ---") # 디버깅
+            st.info(f"입력하신 URL의 기사를 분석합니다: {url_direct_input_tab2}")
             try:
                 with st.spinner(f"기사를 가져와 AI가 분석 중입니다..."):
                     article = Article(final_url_to_process, config=NEWS_CONFIG, language='ko')
