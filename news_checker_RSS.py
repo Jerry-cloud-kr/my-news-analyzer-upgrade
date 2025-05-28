@@ -263,28 +263,36 @@ if st.session_state.current_input_method == "키워드로 Google News 검색":
         
         selectbox_options = ["선택하세요..."] + [item['display_option'] for item in st.session_state.fetched_articles_for_selection_display]
         
-        if 'selected_article_display_title_key' not in st.session_state: # 초기화
-            st.session_state.selected_article_display_title_key = selectbox_options[0]
+        # 이전에 선택한 값을 유지하기 위한 st.session_state 사용 (선택적, 필요 없다면 index=0으로 고정)
+        if 'selected_article_display_title_key_tab1' not in st.session_state:
+            st.session_state.selected_article_display_title_key_tab1 = selectbox_options[0]
 
         selected_display_title_option = st.selectbox(
-            "확인할 기사 제목을 선택하세요 (선택 시 아래 URL이 표시됩니다):",
+            "표시된 목록에서 기사를 선택하세요:", # 라벨 변경
             options=selectbox_options,
-            index=selectbox_options.index(st.session_state.selected_article_display_title_key), # 선택 유지
-            key="select_article_to_view_url_field_final" 
+            index=selectbox_options.index(st.session_state.selected_article_display_title_key_tab1), # 이전 선택 유지
+            key="select_article_to_view_link_final" # key 이름 변경 (더 명확하게)
         )
         # selectbox 변경 시 st.session_state 업데이트
-        if selected_display_title_option != st.session_state.selected_article_display_title_key:
-            st.session_state.selected_article_display_title_key = selected_display_title_option
-            st.rerun() # URL 표시를 즉시 업데이트하기 위해 rerun
+        if selected_display_title_option != st.session_state.selected_article_display_title_key_tab1:
+            st.session_state.selected_article_display_title_key_tab1 = selected_display_title_option
+            st.rerun() 
 
-        if st.session_state.selected_article_display_title_key and st.session_state.selected_article_display_title_key != "선택하세요...":
-            selected_article_data = next((item for item in st.session_state.fetched_articles_for_selection_display if item['display_option'] == st.session_state.selected_article_display_title_key), None)
+        if st.session_state.selected_article_display_title_key_tab1 and st.session_state.selected_article_display_title_key_tab1 != "선택하세요...":
+            selected_article_data = next((item for item in st.session_state.fetched_articles_for_selection_display if item['display_option'] == st.session_state.selected_article_display_title_key_tab1), None)
             
             if selected_article_data:
-                st.markdown(f"**선택된 기사:** {selected_article_data['original_title']}") 
-                st.markdown(f"**해당 기사 원문 URL (아래 주소를 복사하세요):**")
-                st.code(selected_article_data['url']) 
-                st.info("👆 위 URL을 복사하여 'URL 직접 입력' 탭에 붙여넣고 분석을 시작하세요.")
+                # --- 여기가 핵심 변경 부분 ---
+                st.markdown("---")
+                st.markdown(f"**선택된 기사 (클릭 시 원문 이동):**")
+                # 기사 제목을 클릭 가능한 링크로 만듭니다. 새 창에서 열리도록 target="_blank" 추가.
+                st.markdown(f"### [{selected_article_data['original_title']}]({selected_article_data['url']})", unsafe_allow_html=True)
+                
+                st.markdown(f"**표시된 기사 원문 URL (참고용):**")
+                st.code(selected_article_data['url']) # URL 텍스트도 여전히 보여줘서 복사할 수 있게 합니다.
+                
+                st.info("👆 위 기사 제목 링크를 클릭하여 원문을 확인하신 후, 해당 URL을 복사하거나 위의 URL 텍스트를 복사하여 'URL 직접 입력' 탭에 붙여넣고 분석을 시작하세요.")
+                # --- 여기까지 핵심 변경 부분 ---
         st.markdown("---")
 
 elif st.session_state.current_input_method == "URL 직접 입력":
