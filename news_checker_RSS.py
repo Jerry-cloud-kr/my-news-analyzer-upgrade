@@ -237,23 +237,54 @@ if st.session_state.current_input_method == "키워드로 Google News 검색":
             except Exception as e:
                 st.error(f"뉴스 검색 중 오류 발생: {e}")
             
-            if fetched_articles_for_display_list:
-                st.session_state.article_options_for_display = fetched_articles_for_display_list
-            else: 
-                if 'article_options_for_display' in st.session_state:
-                    del st.session_state.article_options_for_display
-    
-    if 'article_options_for_display' in st.session_state and st.session_state.article_options_for_display:
+if 'article_options_for_display' in st.session_state and st.session_state.article_options_for_display:
         st.markdown("---")
-        st.write("👇 분석할 기사의 원문 링크를 클릭하여 내용을 확인 후, 'URL 직접 입력/분석' 탭에 붙여넣어 분석해주세요.")
-        for item in st.session_state.article_options_for_display:
-            # 제목이 길 경우 일부만 표시하고 전체는 툴팁으로 (선택적 개선)
-            display_title = item['title']
-            if len(display_title) > 70: # 70자 이상이면 줄임
-                display_title = display_title[:70] + "..."
-            st.markdown(f"- [{display_title}]({item['url']}) <span style='font-size:0.8em; color:gray;'> (RSS 제공 링크: {item['original_rss_link']})</span>", unsafe_allow_html=True)
-        st.info("관심 있는 기사의 링크(파란색 글씨)를 클릭하여 원문을 확인하신 후, 그 **최종 원문 URL**을 복사하여 'URL 직접 입력/분석' 탭에서 분석을 진행해주세요.")
+        
+        # st.session_state.article_options_for_display는 [{'title': '제목', 'url': 'URL', 'original_rss_link': '...'}, ...] 형태의 리스트입니다.
+        # selectbox에 표시할 제목 목록을 만듭니다. (예: "1. 기사제목 A", "2. 기사제목 B")
+        # 그리고 선택된 표시용 제목을 통해 실제 URL을 찾을 수 있도록 딕셔너리도 만듭니다.
+        
+        display_title_to_url_map = {}
+        selectbox_options = ["선택하세요..."] # 드롭다운의 첫 번째 옵션
+        
+        for i, item in enumerate(st.session_state.article_options_for_display):
+            # selectbox에 너무 긴 제목이 들어가지 않도록 처리 (선택적)
+            truncated_title = item['title']
+            if len(truncated_title) > 80: # 80자 이상이면 줄임
+                truncated_title = truncated_title[:80] + "..."
+            
+            display_option = f"{i+1}. {truncated_title}" # 예: "1. 매우 긴 기사 제목입니다..."
+            selectbox_options.append(display_option)
+            display_title_to_url_map[display_option] = item['url'] # 표시용 제목과 실제 URL 매핑
 
+        # 이전에 선택한 값을 유지하기 위해 session_state 사용 (선택적)
+        if 'selected_article_display_title' not in st.session_state:
+            st.session_state.selected_article_display_title = selectbox_options[0] # 기본값 "선택하세요..."
+
+        selected_display_title = st.selectbox(
+            "확인할 기사를 선택하세요:",
+            options=selectbox_options,
+            # index=selectbox_options.index(st.session_state.selected_article_display_title), # 이전 선택 유지 (필요시)
+            index = 0, # 항상 "선택하세요..."로 시작
+            key="select_article_to_view_url_revised"
+        )
+        st.session_state.selected_article_display_title = selected_display_title # 현재 선택 저장
+
+        if selected_display_title and selected_display_title != "선택하세요...":
+            selected_final_url = display_title_to_url_map[selected_display_title] # 매핑된 실제 URL 가져오기
+            
+            # 원본 기사 제목 (줄이지 않은 전체 제목)을 다시 찾기 (선택적, 더 정확한 제목 표시 위함)
+            original_title_for_selected_url = ""
+            for item in st.session_state.article_options_for_display:
+                if display_title_to_url_map.get(selected_display_title) == item['url']: # URL이 같은 항목을 찾아
+                    original_title_for_selected_url = item['title'] # 원본 제목 사용
+                    break
+            
+            st.markdown(f"**선택한 기사 제목:** {original_title_for_selected_url if original_title_for_selected_url else selected_display_title.split('. ', 1)[-1]}")
+            st.markdown(f"**기사 원문 URL (아래 주소를 복사하세요):**")
+            st.code(selected_final_url) # URL을 코드 블록으로 보여줘서 복사하기 쉽게
+            st.info("👆 위 URL을 복사하여 'URL 직접 입력/분석' 탭에 붙여넣고 분석을 시작하세요.")
+        st.markdown("---")
 
 elif st.session_state.current_input_method == "URL 직접 입력":
     st.subheader("🔗 URL 직접 입력하여 분석하기")
