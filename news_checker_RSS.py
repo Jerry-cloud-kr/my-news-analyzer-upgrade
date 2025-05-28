@@ -293,20 +293,27 @@ def load_rss_feeds_from_csv(file_path="feed_specs.csv"): # 기본 파일명을 �
     # 보통은 스크립트와 같은 레벨에 파일을 두고 직접 파일명을 사용합니다.
 
     try:
-    df = pd.read_csv(file_path, encoding="cp949")
-except UnicodeDecodeError:
-    # cp949로도 실패하면 euc-kr 시도
-    try:
-        df = pd.read_csv(file_path, encoding="euc-kr")
+        # try 다음 줄부터는 이렇게 안으로 한 단계 들여쓰기 해주세요.
+        df = pd.read_csv(file_path, encoding="cp949")
+        return df # 성공 시 df 반환
     except UnicodeDecodeError:
-        st.error(f"'{file_path}' 파일의 인코딩을 'utf-8', 'cp949', 'euc-kr'로 읽는 데 모두 실패했습니다. 파일 인코딩을 확인해주세요.")
+        # cp949로도 실패하면 euc-kr 시도
+        try:
+            # 여기도 마찬가지로 안으로 들여쓰기
+            df = pd.read_csv(file_path, encoding="euc-kr")
+            return df # 성공 시 df 반환
+        except UnicodeDecodeError:
+            st.error(f"'{file_path}' 파일의 인코딩을 'utf-8', 'cp949', 'euc-kr'로 읽는 데 모두 실패했습니다. 파일 인코딩을 확인해주세요.")
+            return None # 모든 시도 실패 시 None 반환
+        except Exception as e_inner: 
+            st.error(f"CSV 파일을 'euc-kr' 인코딩으로 읽는 중 오류 발생: {e_inner}")
+            return None
+    except FileNotFoundError: # FileNotFoundError는 UnicodeDecodeError보다 먼저 또는 별도로 처리하는 것이 좋습니다.
+        st.error(f"'{file_path}' 파일을 찾을 수 없습니다. GitHub 저장소에 파일이 올바르게 업로드되었는지, 파일 경로가 정확한지 확인해주세요.")
         return None
-    except Exception as e_inner: # 기타 read_csv 오류
-        st.error(f"CSV 파일을 'euc-kr' 인코딩으로 읽는 중 오류 발생: {e_inner}")
+    except Exception as e_outer: 
+        st.error(f"CSV 파일을 'cp949' 또는 다른 방식으로 읽는 중 오류 발생: {e_outer}")
         return None
-except Exception as e_outer: # 기타 read_csv 오류 (cp949 시도 중)
-    st.error(f"CSV 파일을 'cp949' 인코딩으로 읽는 중 오류 발생: {e_outer}")
-    return None
 
 # --- 앱의 메인 로직에서 CSV 데이터 사용 ---
 # 예: 앱 시작 시 또는 특정 기능 실행 시 RSS 피드 목록 로드
