@@ -1,24 +1,24 @@
 import streamlit as st
-from newspaper import Article, Config # newspaper Config 추가
-from sentence_transformers import SentenceTransformer, util # <<--- 유사도 분석 활성화
-import openai 
-from openai import OpenAI 
+from newspaper import Article, Config
+from sentence_transformers import SentenceTransformer, util
+import openai
+from openai import OpenAI
 import google.generativeai as genai
-import feedparser 
-import requests 
+import feedparser
+import requests
+import urllib.parse # URL 인코딩을 위해 추가
 
 # --- API Key 및 클라이언트 설정 (Secrets 우선) ---
 # OpenAI
-client_openai = None 
+client_openai = None
 OPENAI_API_KEY_Direct_Placeholder = "YOUR_OPENAI_KEY_PLACEHOLDER" # 로컬 테스트 시 실제 키를 여기에!
 try:
     OPENAI_API_KEY_FROM_SECRETS = st.secrets["OPENAI_API_KEY"]
     if not OPENAI_API_KEY_FROM_SECRETS:
          st.error("⚠️ OpenAI API 키가 Streamlit Secrets에 설정되었으나 값이 비어있습니다.")
          st.stop()
-    client_openai = OpenAI(api_key=OPENAI_API_KEY_FROM_SECRETS) 
+    client_openai = OpenAI(api_key=OPENAI_API_KEY_FROM_SECRETS)
 except KeyError: # 로컬에서 st.secrets["OPENAI_API_KEY"]가 없을 때
-    # 사용자가 로컬 테스트를 위해 플레이스홀더에 실제 키를 입력했는지 확인
     if OPENAI_API_KEY_Direct_Placeholder == "YOUR_OPENAI_KEY_PLACEHOLDER" or not OPENAI_API_KEY_Direct_Placeholder:
         st.error("OpenAI API 키를 Secrets에서 찾을 수 없습니다. 로컬 테스트를 원하시면 코드 상단 OPENAI_API_KEY_Direct_Placeholder 값을 실제 키로 입력하거나, 앱 배포 후 Streamlit Community Cloud의 Secrets 설정을 확인하세요.")
         st.stop()
@@ -106,15 +106,14 @@ def extract_keywords_gemini(article_text):
         return []
 
 # --- 유사도 측정 모델 로드 (활성화) ---
-model_similarity = None 
+model_similarity = None
 try:
-    model_similarity = SentenceTransformer('all-MiniLM-L6-v2', device='cpu') 
+    model_similarity = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
     if model_similarity:
-        print("SentenceTransformer 모델 로드 성공!") 
-    else: 
-        # 이 경우는 거의 발생하지 않지만, 만약을 위해 남겨둡니다.
+        print("SentenceTransformer 모델 로드 성공!")
+    else:
         st.error("SentenceTransformer 모델 로드에 실패했으나 명시적 오류가 발생하지 않았습니다. 앱 실행을 중단합니다.")
-        st.stop() 
+        st.stop()
 except Exception as e:
     st.error(f"SentenceTransformer 모델 로드 중 심각한 오류 발생: {e}")
     st.error("팁: 이 오류는 보통 torch, torchvision, torchaudio 또는 sentence-transformers 라이브러리 설치/호환성 문제입니다.")
@@ -138,40 +137,71 @@ def display_article_analysis_content(title_to_display, text_content, article_url
     else: st.write(body_summary)
     st.markdown("---")
 
-    # Gemini로 키워드 추출 및 비교
-    st.subheader("🔍 AI 추출 주요 키워드와 제목 비교 (by Gemini AI)")
+    # Gemini로 키워드 추출 및 비교 (*** 여기가 수정된 부분 ***)
+    st.subheader("🔍 AI 추출 주요 키워드 (클릭 시 Google 검색)")
     extracted_keywords = extract_keywords_gemini(text_content)
+
     if not extracted_keywords:
         st.info("ℹ️ AI가 본문에서 주요 키워드를 추출하지 못했거나, 추출된 키워드가 없습니다.")
     else:
-        st.caption(f"AI(Gemini)가 본문에서 추출한 주요 키워드: **{', '.join(extracted_keywords)}**")
+        keyword_links_html_list = []
+        for kw in extracted_keywords:
+            search_url_google = f"https://www.google.com/search?q={urllib.parse.quote_plus(kw)}"
+            # HTML <a> 태그를 사용하여 새 창에서 열리도록 하고, 간단한 스타일 적용
+            keyword_links_html_list.append(
+                f"<a href='{search_url_google}' target='_blank' "
+                f"style='margin-right: 7px; margin-bottom: 5px; padding: 3px 7px; "
+                f"border: 1px solid #007bff; border-radius: 5px; color: #007bff; "
+                f"text-decoration: none; display: inline-block;'>{kw}</a>"
+            )
+        
+        st.markdown("AI(Gemini)가 본문에서 추출한 주요 키워드:<br>" + "".join(keyword_links_html_list), unsafe_allow_html=True)
+
         missing_in_title = [kw for kw in extracted_keywords if kw.lower() not in title_to_display.lower()]
         if missing_in_title:
-            st.warning(f"❗ AI 추출 키워드 중 일부가 제목에 빠져있을 수 있습니다: **{', '.join(missing_in_title)}**")
-        else:
+            missing_keyword_links_html_list = []
+            for kw_missing in missing_in_title:
+                search_url_google_missing = f"https://www.google.com/search?q={urllib.parse.quote_plus(kw_missing)}"
+                missing_keyword_links_html_list.append(
+                    f"<a href='{search_url_google_missing}' target='_blank' "
+                    f"style='margin-right: 7px; margin-bottom: 5px; padding: 3px 7px; "
+                    f"border: 1px solid #ffc107; border-radius: 5px; color: #c69500; "
+                    f"text-decoration: none; display: inline-block;'>{kw_missing}</a>"
+                )
+            
+            # st.warning 대신 st.markdown을 사용하여 HTML 링크 포함
+            warning_html_message = f"""
+            <div style="background-color: #fff3cd; color: #856404; padding: 0.75rem 1.25rem; margin-top: 1rem; margin-bottom: 1rem; border: 1px solid transparent; border-radius: 0.25rem; border-color: #ffeeba;">
+                ❗ AI 추출 키워드 중 일부가 제목에 빠져있을 수 있습니다:<br> {''.join(missing_keyword_links_html_list)}
+            </div>
+            """
+            st.markdown(warning_html_message, unsafe_allow_html=True)
+
+        elif extracted_keywords: # 키워드가 있었고, 제목에 모두 반영된 경우
             st.success("✅ AI 추출 핵심 키워드가 제목에 잘 반영되어 있습니다.")
     st.markdown("---")
-    
+    # (*** 수정된 부분 여기까지 ***)
+
     # 유사도 판단 (활성화)
     st.subheader("📊 제목-본문요약 유사도 판단")
-    if model_similarity is not None: 
+    if model_similarity is not None:
         try:
             embeddings = model_similarity.encode([title_to_display, body_summary], convert_to_tensor=True)
             similarity = util.pytorch_cos_sim(embeddings[0], embeddings[1]).item()
-            
+
             similarity_threshold_high = 0.65; similarity_threshold_mid = 0.40
             if similarity > similarity_threshold_high: result_text, result_color = "✅ **높음**: 제목이 본문 요약 내용을 잘 반영하고 있습니다.", "green"
             elif similarity > similarity_threshold_mid: result_text, result_color = "🟡 **중간**: 제목이 본문 요약과 다소 관련은 있지만, 내용이 약간 다를 수 있습니다.", "orange"
             else: result_text, result_color = "⚠️ **낮음**: 제목이 본문 요약 내용과 많이 다를 수 있습니다. 낚시성이거나 다른 내용을 다룰 가능성을 확인해보세요.", "red"
-            
+
             st.markdown(f"<span style='color:{result_color};'>{result_text}</span> (유사도 점수: {similarity:.2f})", unsafe_allow_html=True)
             st.caption(f"참고: 유사도는 제목과 AI 요약문 간의 의미적 관계를 나타내며, 임계값(현재: 높음 {similarity_threshold_high}, 중간 {similarity_threshold_mid})에 따라 해석이 달라질 수 있습니다.")
         except Exception as e_sim:
             st.error(f"유사도 분석 중 오류 발생: {e_sim}")
             print(f"유사도 분석 오류: {e_sim}")
             st.info("ℹ️ 유사도 분석을 수행할 수 없습니다.")
-    else: 
-        st.info("ℹ️ 제목-본문 유사도 분석 기능은 SentenceTransformer 모델 로드 문제로 인해 현재 실행되지 않았습니다.") 
+    else:
+        st.info("ℹ️ 제목-본문 유사도 분석 기능은 SentenceTransformer 모델 로드 문제로 인해 현재 실행되지 않았습니다.")
     st.markdown("---")
 
     # GPT로 프레이밍 분석 (유지)
@@ -186,8 +216,8 @@ def display_article_analysis_content(title_to_display, text_content, article_url
 NEWS_CONFIG = Config()
 NEWS_CONFIG.browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 NEWS_CONFIG.request_timeout = 15
-NEWS_CONFIG.memoize_articles = False 
-NEWS_CONFIG.fetch_images = False 
+NEWS_CONFIG.memoize_articles = False
+NEWS_CONFIG.fetch_images = False
 
 # --- Streamlit 앱 UI 구성 ---
 st.set_page_config(page_title="뉴스읽은척방지기 (AI)", page_icon="🧐")
@@ -214,100 +244,128 @@ if selected_input_method_on_page != st.session_state.current_input_method:
         del st.session_state.fetched_articles_for_selection_display
     if 'selected_article_to_show_url' in st.session_state: # 선택된 URL 표시 초기화
         del st.session_state.selected_article_to_show_url
+    # "키워드로 Google News 검색" 탭의 입력값/선택값도 초기화
+    if 'keyword_search_input_final' in st.session_state: # 텍스트 입력 초기화
+        st.session_state.keyword_search_input_final = ""
+    if 'selected_article_display_title_key_tab1' in st.session_state: # selectbox 선택 초기화
+        st.session_state.selected_article_display_title_key_tab1 = "선택하세요..."
     st.rerun() # UI를 깨끗하게 정리하고 라디오 버튼 선택 즉시 반영
+
 
 if st.session_state.current_input_method == "키워드로 Google News 검색":
     st.subheader("🗂️ 키워드로 뉴스 찾아보기")
-    search_query_keyword_tab = st.text_input("검색할 키워드를 입력하세요:", placeholder="예: 글로벌 경제 동향", key="keyword_search_input_final")
+    
+    # 텍스트 입력 값을 세션 상태로 관리
+    if 'keyword_search_input_final' not in st.session_state:
+        st.session_state.keyword_search_input_final = ""
+
+    search_query_keyword_tab = st.text_input(
+        "검색할 키워드를 입력하세요:",
+        value=st.session_state.keyword_search_input_final, # 세션 상태 값 사용
+        placeholder="예: 글로벌 경제 동향",
+        key="keyword_search_input_widget_key" # 위젯 자체의 키
+    )
+    # 사용자가 입력하면 세션 상태 업데이트
+    if search_query_keyword_tab != st.session_state.keyword_search_input_final:
+        st.session_state.keyword_search_input_final = search_query_keyword_tab
+        # 입력 변경 시 이전 검색 결과 및 선택 초기화
+        if 'fetched_articles_for_selection_display' in st.session_state:
+            del st.session_state.fetched_articles_for_selection_display
+        if 'selected_article_display_title_key_tab1' in st.session_state:
+            st.session_state.selected_article_display_title_key_tab1 = "선택하세요..."
+        # st.rerun() # 즉시 반영을 원하면 활성화, 버튼 클릭 시 검색이면 불필요
 
     if st.button("🔍 뉴스 검색", key="keyword_search_action_button_final", use_container_width=True):
-        if not search_query_keyword_tab:
+        if not st.session_state.keyword_search_input_final: # 세션 상태의 값으로 확인
             st.warning("검색어를 입력해주세요.")
         else:
-            st.session_state.fetched_articles_for_selection_display = None 
-            google_news_rss_url = f"https://news.google.com/rss/search?q={search_query_keyword_tab}&hl=ko&gl=KR&ceid=KR:ko"
-            temp_articles_list = [] 
+            # 검색 시 이전 결과 초기화 (선택 사항, 이미 입력 변경 시 초기화 중)
+            if 'fetched_articles_for_selection_display' in st.session_state:
+                 del st.session_state.fetched_articles_for_selection_display
+            st.session_state.selected_article_display_title_key_tab1 = "선택하세요..."
+
+
+            google_news_rss_url = f"https://news.google.com/rss/search?q={st.session_state.keyword_search_input_final}&hl=ko&gl=KR&ceid=KR:ko"
+            temp_articles_list = []
             try:
                 custom_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                with st.spinner(f"'{search_query_keyword_tab}' 관련 뉴스를 Google News에서 검색하고 링크를 확인 중..."):
+                with st.spinner(f"'{st.session_state.keyword_search_input_final}' 관련 뉴스를 Google News에서 검색하고 링크를 확인 중..."):
                     feed = feedparser.parse(google_news_rss_url, agent=custom_user_agent)
                     if feed.entries:
                         count = 0
-                        for i, entry in enumerate(feed.entries[:15]): 
+                        for i, entry in enumerate(feed.entries[:15]):
                             if hasattr(entry, 'title') and hasattr(entry, 'link'):
-                                final_url = get_final_url(entry.link) 
+                                final_url = get_final_url(entry.link)
                                 if final_url:
-                                    # selectbox에 표시될 내용, 원본 제목, 최종 URL 저장
                                     temp_articles_list.append({
-                                        'display_option': f"{i+1}. {entry.title[:80]}{'...' if len(entry.title) > 80 else ''}", 
-                                        'original_title': entry.title, 
+                                        'display_option': f"{i+1}. {entry.title[:80]}{'...' if len(entry.title) > 80 else ''}",
+                                        'original_title': entry.title,
                                         'url': final_url
                                     })
                                     count +=1
                         if temp_articles_list:
-                             st.success(f"'{search_query_keyword_tab}' 관련 뉴스 {count}건의 링크를 확인했습니다.")
+                             st.success(f"'{st.session_state.keyword_search_input_final}' 관련 뉴스 {count}건의 링크를 확인했습니다.")
                              st.session_state.fetched_articles_for_selection_display = temp_articles_list
                         else:
-                            st.warning(f"'{search_query_keyword_tab}' 관련 Google News에서 유효한 기사 링크를 찾을 수 없거나, 기사 형식이 올바르지 않습니다.")
+                            st.warning(f"'{st.session_state.keyword_search_input_final}' 관련 Google News에서 유효한 기사 링크를 찾을 수 없거나, 기사 형식이 올바르지 않습니다.")
+                            if 'fetched_articles_for_selection_display' in st.session_state:
+                                del st.session_state.fetched_articles_for_selection_display
                     else:
-                        st.warning(f"'{search_query_keyword_tab}' 관련 Google News에서 기사를 가져오지 못했습니다. (HTTP Status: {feed.get('status', 'N/A')})")
+                        st.warning(f"'{st.session_state.keyword_search_input_final}' 관련 Google News에서 기사를 가져오지 못했습니다. (HTTP Status: {feed.get('status', 'N/A')})")
+                        if 'fetched_articles_for_selection_display' in st.session_state:
+                            del st.session_state.fetched_articles_for_selection_display
             except Exception as e:
                 st.error(f"뉴스 검색 중 오류 발생: {e}")
-            
-            if not ('fetched_articles_for_selection_display' in st.session_state and st.session_state.fetched_articles_for_selection_display):
-                if 'fetched_articles_for_selection_display' in st.session_state: 
+                if 'fetched_articles_for_selection_display' in st.session_state:
                     del st.session_state.fetched_articles_for_selection_display
-    
+
     if 'fetched_articles_for_selection_display' in st.session_state and st.session_state.fetched_articles_for_selection_display:
         st.markdown("---")
-        
+
         selectbox_options = ["선택하세요..."] + [item['display_option'] for item in st.session_state.fetched_articles_for_selection_display]
-        
-        # 이전에 선택한 값을 유지하기 위한 st.session_state 사용 (선택적, 필요 없다면 index=0으로 고정)
-        if 'selected_article_display_title_key_tab1' not in st.session_state:
+
+        # selectbox의 선택 상태도 세션에서 관리
+        if 'selected_article_display_title_key_tab1' not in st.session_state or \
+           st.session_state.selected_article_display_title_key_tab1 not in selectbox_options: # 새 검색 결과에 이전 선택이 없으면 초기화
             st.session_state.selected_article_display_title_key_tab1 = selectbox_options[0]
 
+
         selected_display_title_option = st.selectbox(
-            "표시된 목록에서 기사를 선택하세요:", # 라벨 변경
+            "표시된 목록에서 기사를 선택하세요:",
             options=selectbox_options,
-            index=selectbox_options.index(st.session_state.selected_article_display_title_key_tab1), # 이전 선택 유지
-            key="select_article_to_view_link_final" # key 이름 변경 (더 명확하게)
+            index=selectbox_options.index(st.session_state.selected_article_display_title_key_tab1),
+            key="select_article_to_view_link_final"
         )
-        # selectbox 변경 시 st.session_state 업데이트
         if selected_display_title_option != st.session_state.selected_article_display_title_key_tab1:
             st.session_state.selected_article_display_title_key_tab1 = selected_display_title_option
-            st.rerun() 
+            st.rerun()
 
         if st.session_state.selected_article_display_title_key_tab1 and st.session_state.selected_article_display_title_key_tab1 != "선택하세요...":
             selected_article_data = next((item for item in st.session_state.fetched_articles_for_selection_display if item['display_option'] == st.session_state.selected_article_display_title_key_tab1), None)
-            
+
             if selected_article_data:
-                # --- 여기가 핵심 변경 부분 ---
                 st.markdown("---")
                 st.markdown(f"**선택된 기사 (클릭 시 원문 이동):**")
-                # 기사 제목을 클릭 가능한 링크로 만듭니다. 새 창에서 열리도록 target="_blank" 추가.
                 st.markdown(f"### [{selected_article_data['original_title']}]({selected_article_data['url']})", unsafe_allow_html=True)
-                                
                 st.info("👆 위 기사 제목 링크를 클릭하여 원문을 확인하신 후, 해당 URL을 복사하여 'URL 직접 입력' 탭에 붙여넣고 분석을 시작하세요.")
-                # --- 여기까지 핵심 변경 부분 ---
         st.markdown("---")
 
 elif st.session_state.current_input_method == "URL 직접 입력":
     st.subheader("🔗 URL 직접 입력하여 분석하기")
-    url_direct_input_field_val = st.text_input( 
-        "분석할 뉴스 기사의 전체 URL을 입력해주세요:", 
-        placeholder="예: https://www.example-news.com/news/article123", 
-        key="url_direct_input_field_main_key_final" 
+    url_direct_input_field_val = st.text_input(
+        "분석할 뉴스 기사의 전체 URL을 입력해주세요:",
+        placeholder="예: https://www.example-news.com/news/article123",
+        key="url_direct_input_field_main_key_final"
     )
 
-    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_main_action_key_final_action"): 
+    if st.button("🚀 URL 분석 시작", use_container_width=True, key="direct_url_analyze_button_main_action_key_final_action"):
         if not url_direct_input_field_val:
             st.warning("분석할 기사의 URL을 입력해주세요.")
         elif not (url_direct_input_field_val.startswith('http://') or url_direct_input_field_val.startswith('https://')):
             st.warning("올바른 URL 형식이 아닙니다. 'http://' 또는 'https://'로 시작해야 합니다.")
         else:
-            final_url_to_process = get_final_url(url_direct_input_field_val) 
-            
+            final_url_to_process = get_final_url(url_direct_input_field_val)
+
             try:
                 with st.spinner(f"기사를 가져와 AI가 분석 중입니다... (URL: {final_url_to_process})"):
                     article = Article(final_url_to_process, config=NEWS_CONFIG, language='ko')
@@ -319,5 +377,5 @@ elif st.session_state.current_input_method == "URL 직접 입력":
                         display_article_analysis_content(article.title, article.text, final_url_to_process)
             except Exception as e:
                 st.error(f"URL 기사 처리 중 오류 발생: {e}")
-                print(f"전체 오류: {e}") 
+                print(f"전체 오류: {e}")
                 st.caption("URL을 확인하시거나, 다른 기사를 시도해보세요. 일부 웹사이트는 외부 접근을 통한 기사 수집을 허용하지 않을 수 있습니다.")
