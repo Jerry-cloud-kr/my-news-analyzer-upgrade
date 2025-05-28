@@ -257,8 +257,13 @@ with input_tab1:
 
             if feed_url_to_parse: 
                 try:
+                    # --- User-Agent 설정 ---
+                    custom_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    
                     with st.spinner(f"{feed_source_name}에서 뉴스를 가져오는 중..."):
-                        feed = feedparser.parse(feed_url_to_parse)
+                        # --- feedparser.parse() 호출 시 agent 파라미터 추가 ---
+                        feed = feedparser.parse(feed_url_to_parse, agent=custom_user_agent)
+                    
                     if feed.entries:
                         for entry in feed.entries[:30]: 
                             if hasattr(entry, 'title') and hasattr(entry, 'link'):
@@ -266,9 +271,10 @@ with input_tab1:
                         if article_options_tab1:
                              st.success(f"{feed_source_name}에서 {len(article_options_tab1)}건의 기사 제목을 찾았습니다.")
                         else:
-                            st.warning(f"{feed_source_name}에서 기사를 찾을 수 없거나, 기사 형식이 올바르지 않습니다.")
+                            st.warning(f"{feed_source_name}에서 기사를 찾을 수 없거나, 기사 형식이 올바르지 않습니다. (피드 자체는 가져왔으나 내용이 비었거나 형식이 다를 수 있습니다.)")
                     else:
-                        st.warning(f"{feed_source_name}에서 기사를 찾을 수 없습니다.")
+                        # 피드 자체를 못 가져왔거나, entries가 비어있는 경우
+                        st.warning(f"{feed_source_name}에서 기사를 가져오지 못했습니다. URL이나 키워드를 확인해주세요. (HTTP Status: {feed.get('status', 'N/A')})")
                 except Exception as e:
                     st.error(f"{search_type_tab1} 처리 중 오류 발생: {e}")
         
