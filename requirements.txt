@@ -6,3 +6,6 @@ google-generativeai
 feedparser
 lxml[html_clean]
 pandas
+torch
+torchvision
+torchaudio

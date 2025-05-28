@@ -119,13 +119,13 @@ publisher,title,categories,url
 조선일보,스포츠,sports,https://www.chosun.com/arc/outboundfeeds/rss/category/sports/?outputType=xml
 조선일보,연예,entertainment,https://www.chosun.com/arc/outboundfeeds/rss/category/entertainments/?outputType=xml
 조세일보,전체,_all_,http://www.joseilbo.com/Contents/rss/rss_total.php
-조세일보,조세/회계,tax,"	http://www.joseilbo.com/Contents/rss/rss_tax.php"
-조세일보,금융/증권,finance,"	http://www.joseilbo.com/Contents/rss/rss_finance.php"
-조세일보,산업,industry,"	http://www.joseilbo.com/Contents/rss/rss_industry.php"
-조세일보,경제,economy,"	http://www.joseilbo.com/Contents/rss/rss_economy.php"
-조세일보,정치/사회,politics/society,"	http://www.joseilbo.com/Contents/rss/rss_politics.php"
-조세일보,연예/스포츠,entertainment,"	http://www.joseilbo.com/Contents/rss/rss_ent.php"
-조세일보,세무사/회계사,cta,"	http://www.joseilbo.com/Contents/rss/rss_cta.php"
+조세일보,조세/회계,tax,http://www.joseilbo.com/Contents/rss/rss_tax.php
+조세일보,금융/증권,finance,http://www.joseilbo.com/Contents/rss/rss_finance.php
+조세일보,산업,industry,http://www.joseilbo.com/Contents/rss/rss_industry.php
+조세일보,경제,economy,http://www.joseilbo.com/Contents/rss/rss_economy.php
+조세일보,정치/사회,politics/society,http://www.joseilbo.com/Contents/rss/rss_politics.php
+조세일보,연예/스포츠,entertainment,http://www.joseilbo.com/Contents/rss/rss_ent.php
+조세일보,세무사/회계사,cta,http://www.joseilbo.com/Contents/rss/rss_cta.php
 천지일보,전체기사,_all_,https://cdn.newscj.com/rss/gns_allArticle.xml
 천지일보,정치,politics,https://cdn.newscj.com/rss/gns_S1N1.xml
 천지일보,경제,economy,https://cdn.newscj.com/rss/gns_S1N2.xml

@@ -1,16 +1,16 @@
 import streamlit as st
 import pandas as pd
-import os # 파일 경로 작업을 위해 추가
+import os
 from newspaper import Article
-# from sentence_transformers import SentenceTransformer, util # <<<<<<<<<<< 일단 주석 처리
-import openai # OpenAI 라이브러리
-from openai import OpenAI # OpenAI 클라이언트 클래스 임포트
+from sentence_transformers import SentenceTransformer, util # <<--- 주석 해제
+import openai
+from openai import OpenAI
 import google.generativeai as genai
-import feedparser # 키워드 검색 기능에 필요
+import feedparser
 
 # --- OpenAI API Key 및 클라이언트 설정 (Secrets 사용) ---
-client_openai = None # OpenAI 클라이언트 변수 선언
-OPENAI_API_KEY_Direct_Placeholder = "YOUR_OPENAI_KEY_PLACEHOLDER" # 로컬 테스트용 플레이스홀더
+client_openai = None 
+OPENAI_API_KEY_Direct_Placeholder = "YOUR_OPENAI_KEY_PLACEHOLDER" 
 
 try:
     OPENAI_API_KEY_FROM_SECRETS = st.secrets["OPENAI_API_KEY"]
@@ -52,99 +52,62 @@ except Exception as e:
     st.error(f"Google AI API 키 설정 중 오류: {e}")
     st.stop()
 
-
-# 요약 함수 (Gemini 사용)
-def summarize_text_gemini(text_content): # 함수 이름에 _gemini 명시
+# --- AI 기능 함수들 ---
+def summarize_text_gemini(text_content):
     model = genai.GenerativeModel(
         model_name='gemini-1.5-flash-latest',
         system_instruction="너는 뉴스 기사의 핵심 내용을 객관적으로 요약하는 AI야."
     )
-    prompt = f"""
-    다음 뉴스 기사 본문을 객관적인 사실에 기반하여 핵심 내용 중심으로 요약해 주십시오.
-    요약에는 주요 인물, 발생한 사건, 중요한 발언, 그리고 사건의 배경 정보가 포함되어야 합니다.
-    주관적인 해석, 평가, 또는 기사에 명시적으로 드러나지 않은 추론은 배제하고, 사실 관계를 명확히 전달하는 데 집중해 주십시오.
-    분량은 한국어 기준으로 약 3~5문장 (또는 100~150 단어) 정도로 간결하게 작성해 주십시오.
-
-    기사:
-    {text_content}
-    """
+    prompt = f"다음 뉴스 기사 본문을 객관적인 사실에 기반하여 핵심 내용 중심으로 요약해 주십시오. 요약에는 주요 인물, 발생한 사건, 중요한 발언, 그리고 사건의 배경 정보가 포함되어야 합니다. 주관적인 해석, 평가, 또는 기사에 명시적으로 드러나지 않은 추론은 배제하고, 사실 관계를 명확히 전달하는 데 집중해 주십시오. 분량은 한국어 기준으로 약 3~5문장 (또는 100~150 단어) 정도로 간결하게 작성해 주십시오.\n\n기사:\n{text_content}"
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(temperature=0.3)
-        )
+        response = model.generate_content(prompt,generation_config=genai.types.GenerationConfig(temperature=0.3))
         return response.text.strip()
     except Exception as e:
-        st.warning("요약 생성 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+        st.warning("요약 생성 중 일시적인 오류가 발생했습니다.")
         print(f"Gemini 요약 API 오류: {e}")
         return "요약 생성에 실패했습니다."
 
-# 프레이밍 분석 함수 (OpenAI GPT 사용 - 최신 SDK 적용)
-def detect_bias_openai(title, text_content): # 함수 이름에 _openai 명시
-    prompt = f"""
-    다음은 뉴스 제목과 본문입니다.
-    제목이 본문 내용을 충분히 반영하고 있는지, 중요한 맥락이나 인물의 입장이 왜곡되거나 누락되었는지 판단해줘.
-
-    제목: {title}
-    본문: {text_content}
-
-    분석 결과를 간단히 3~5줄로 정리해줘.
-    """
+def detect_bias_openai(title, text_content):
+    prompt = f"다음은 뉴스 제목과 본문입니다. 제목이 본문 내용을 충분히 반영하고 있는지, 중요한 맥락이나 인물의 입장이 왜곡되거나 누락되었는지 판단해줘.\n\n제목: {title}\n본문: {text_content}\n\n분석 결과를 간단히 3~5줄로 정리해줘."
     try:
-        completion = client_openai.chat.completions.create(
-            model="gpt-4", # 또는 "gpt-4o" 
-            messages=[
-                {"role": "system", "content": "너는 공정한 뉴스 프레이밍 분석 도우미야."},
-                {"role": "user", "content": prompt}
-            ]
-        )
+        completion = client_openai.chat.completions.create(model="gpt-4", messages=[{"role": "system", "content": "너는 공정한 뉴스 프레이밍 분석 도우미야."}, {"role": "user", "content": prompt}])
         return completion.choices[0].message.content.strip()
     except Exception as e:
-        st.warning("프레이밍 분석 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+        st.warning("프레이밍 분석 중 일시적인 오류가 발생했습니다.")
         print(f"OpenAI 프레이밍 분석 API 오류: {e}")
         return "프레이밍 분석에 실패했습니다."
 
-
-# Gemini 기반 키워드 추출 함수 (새로 변경된 부분)
 def extract_keywords_gemini(article_text):
     model = genai.GenerativeModel(
         model_name='gemini-1.5-flash-latest',
         system_instruction="You are an AI assistant specialized in extracting the most important keywords from news articles. Keywords should be nouns or core noun phrases. Respond only with the keywords, separated by commas."
     )
-    user_prompt = f"""
-    다음 뉴스 기사 본문에서 가장 중요한 핵심 키워드를 5개만 추출하여, 각 키워드를 쉼표(,)로 구분한 하나의 문자열로 응답해주세요. 다른 설명이나 문장은 포함하지 마세요.
-
-    예시 응답:
-    키워드1,핵심 단어,세번째 키워드,중요 개념,마지막
-
-    기사 본문:
-    {article_text}
-    """
+    user_prompt = f"다음 뉴스 기사 본문에서 가장 중요한 핵심 키워드를 5개만 추출하여, 각 키워드를 쉼표(,)로 구분한 하나의 문자열로 응답해주세요. 다른 설명이나 문장은 포함하지 마세요.\n\n예시 응답:\n키워드1,핵심 단어,세번째 키워드,중요 개념,마지막\n\n기사 본문:\n{article_text}"
     try:
-        response = model.generate_content(
-            user_prompt,
-            generation_config=genai.types.GenerationConfig(temperature=0.2)
-        )
+        response = model.generate_content(user_prompt, generation_config=genai.types.GenerationConfig(temperature=0.2))
         keywords_string = response.text.strip()
         if keywords_string:
-            if "\n" in keywords_string: 
-                keywords_string = keywords_string.split("\n")[-1]
-            if ":" in keywords_string:
-                keywords_string = keywords_string.split(":")[-1].strip()
+            if "\n" in keywords_string: keywords_string = keywords_string.split("\n")[-1]
+            if ":" in keywords_string: keywords_string = keywords_string.split(":")[-1].strip()
             return [kw.strip() for kw in keywords_string.split(',') if kw.strip()]
-        else:
-            return []
+        return []
     except Exception as e:
         print(f"Gemini 키워드 추출 API 오류: {e}")
         st.warning("AI 키워드 추출 중 일시적인 오류가 발생했습니다.")
         return []
 
-# --- 유사도 측정 모델 로드 (일단 주석 처리) ---
-# try:
-#     model_similarity = SentenceTransformer('all-MiniLM-L6-v2')
-# except Exception as e:
-#     st.error(f"SentenceTransformer 모델 로드 중 오류: {e}. 모델이 올바르게 설치되었는지 확인해주세요.")
-#     st.stop()
+# --- 유사도 측정 모델 로드 (다시 활성화) ---
+model_similarity = None # 변수 초기화
+try:
+    model_similarity = SentenceTransformer('all-MiniLM-L6-v2', device='cpu') # device='cpu' 명시적 추가
+    if model_similarity is None: # 로드 실패 시 (드물지만)
+        st.error("SentenceTransformer 모델 로드에 실패했으나 오류가 발생하지 않았습니다. 앱 실행을 중단합니다.")
+        st.stop()
+except Exception as e:
+    st.error(f"SentenceTransformer 모델 로드 중 오류: {e}")
+    st.error("팁: 이 오류는 보통 torch 또는 sentence-transformers 라이브러리 설치/호환성 문제입니다.")
+    st.info("유사도 분석 기능 없이 앱을 계속 사용하시려면 코드에서 해당 모델 로드 부분을 다시 주석 처리해주세요.")
+    st.stop()
 
 # --- 기사 분석 및 결과 표시 함수 ---
 def display_article_analysis_content(title_to_display, text_content, article_url):
@@ -156,26 +119,19 @@ def display_article_analysis_content(title_to_display, text_content, article_url
 
     # Gemini로 요약
     st.subheader("🧾 본문 요약 (by Gemini AI)")
-    with st.expander("⚠️ AI 요약에 대한 중요 안내 (클릭하여 확인)"):
-        st.markdown("""
-        **주의: AI 기반 요약 (Gemini)**
-
-        * 본 요약은 Gemini 모델을 통해 생성되었으며, 기사의 모든 내용을 완벽하게 반영하지 못할 수 있습니다.
-        * AI는 학습 데이터의 한계나 요약 과정의 특성으로 인해 때때로 부정확한 내용을 전달하거나 중요한 내용을 생략할 수 있습니다.
-        * 제공된 요약은 기사의 핵심 내용을 빠르게 파악하기 위한 참고 자료로만 활용해주십시오.
-        * 기사의 전체적인 맥락과 정확한 정보 확인을 위해서는 반드시 원문 기사를 함께 읽어보시는 것이 중요하며, 최종적인 내용에 대한 판단은 사용자의 책임입니다.
-        """)
-    body_summary = summarize_text_gemini(text_content) # Gemini 요약 함수 호출
+    with st.expander("⚠️ AI 요약에 대한 중요 안내 (클릭하여 확인)", expanded=False):
+        st.markdown(""" **주의: AI 기반 요약 (Gemini)**\n\n* 본 요약은 Gemini 모델을 통해 생성되었으며, 기사의 모든 내용을 완벽하게 반영하지 못할 수 있습니다.\n* AI는 학습 데이터의 한계나 요약 과정의 특성으로 인해 때때로 부정확한 내용을 전달하거나 중요한 내용을 생략할 수 있습니다.\n* 제공된 요약은 기사의 핵심 내용을 빠르게 파악하기 위한 참고 자료로만 활용해주십시오.\n* 기사의 전체적인 맥락과 정확한 정보 확인을 위해서는 반드시 원문 기사를 함께 읽어보시는 것이 중요하며, 최종적인 내용에 대한 판단은 사용자의 책임입니다. """)
+    body_summary = summarize_text_gemini(text_content)
     st.write(body_summary)
     st.markdown("---")
 
-    # Gemini로 키워드 추출 및 비교 (변경된 부분)
+    # Gemini로 키워드 추출 및 비교
     st.subheader("🔍 AI 추출 주요 키워드와 제목 비교 (by Gemini AI)")
-    extracted_keywords = extract_keywords_gemini(text_content) # Gemini 키워드 추출 함수 호출
+    extracted_keywords = extract_keywords_gemini(text_content)
     if not extracted_keywords:
         st.info("ℹ️ AI가 본문에서 주요 키워드를 추출하지 못했거나, 추출된 키워드가 없습니다.")
     else:
-        st.caption(f"AI(Gemini)가 본문에서 추출한 주요 키워드: **{', '.join(extracted_keywords)}**") # UI 텍스트 변경
+        st.caption(f"AI(Gemini)가 본문에서 추출한 주요 키워드: **{', '.join(extracted_keywords)}**")
         missing_in_title = [kw for kw in extracted_keywords if kw.lower() not in title_to_display.lower()]
         if missing_in_title:
             st.warning(f"❗ AI 추출 키워드 중 일부가 제목에 빠져있을 수 있습니다: **{', '.join(missing_in_title)}**")
@@ -183,80 +139,119 @@ def display_article_analysis_content(title_to_display, text_content, article_url
             st.success("✅ AI 추출 핵심 키워드가 제목에 잘 반영되어 있습니다.")
     st.markdown("---")
     
-    # 유사도 판단 (일단 주석 처리)
-    st.subheader("📊 제목-본문요약 유사도 판단 (현재 비활성화)")
-    st.info("ℹ️ 제목-본문 유사도 분석 기능은 현재 SentenceTransformer 모델 로드 오류로 인해 비활성화되어 있습니다.")
+    # 유사도 판단 (다시 활성화)
+    st.subheader("📊 제목-본문요약 유사도 판단")
+    if model_similarity is not None: # 모델이 성공적으로 로드되었는지 확인
+        try:
+            embeddings = model_similarity.encode([title_to_display, body_summary], convert_to_tensor=True)
+            similarity = util.pytorch_cos_sim(embeddings[0], embeddings[1]).item()
+            
+            similarity_threshold_high = 0.65
+            similarity_threshold_mid = 0.40
+            if similarity > similarity_threshold_high: result_text, result_color = "✅ **높음**: 제목이 본문 요약 내용을 잘 반영하고 있습니다.", "green"
+            elif similarity > similarity_threshold_mid: result_text, result_color = "🟡 **중간**: 제목이 본문 요약과 다소 관련은 있지만, 내용이 약간 다를 수 있습니다.", "orange"
+            else: result_text, result_color = "⚠️ **낮음**: 제목이 본문 요약 내용과 많이 다를 수 있습니다. 낚시성이거나 다른 내용을 다룰 가능성을 확인해보세요.", "red"
+            
+            st.markdown(f"<span style='color:{result_color};'>{result_text}</span> (유사도 점수: {similarity:.2f})", unsafe_allow_html=True)
+            st.caption(f"참고: 유사도는 제목과 AI 요약문 간의 의미적 관계를 나타내며, 임계값(현재: 높음 {similarity_threshold_high}, 중간 {similarity_threshold_mid})에 따라 해석이 달라질 수 있습니다.")
+        except Exception as e_sim:
+            st.error(f"유사도 분석 중 오류 발생: {e_sim}")
+            print(f"유사도 분석 오류: {e_sim}")
+            st.info("ℹ️ 유사도 분석을 수행할 수 없습니다.")
+    else:
+        st.info("ℹ️ 제목-본문 유사도 분석 기능이 SentenceTransformer 모델 로드 실패로 인해 비활성화되어 있습니다.")
     st.markdown("---")
 
     # GPT로 프레이밍 분석 (유지)
     st.subheader("🕵️ 프레이밍 분석 결과 (by GPT)")
     with st.expander("⚠️ AI 프레이밍 분석 주의사항 (클릭하여 확인)"):
-        st.markdown("""
-        **주의: AI 기반 프레이밍 분석 (GPT)**
-
-        * 본 분석은 GPT 모델에 의해 수행되었으며, 완벽성을 보장하지 않습니다.
-        * AI는 데이터와 학습 방식에 따라 편향된 결과를 제시할 수도 있습니다.
-        * 제공된 분석은 참고 자료로 활용하시고, 최종적인 판단은 사용자의 책임하에 이루어져야 합니다.
-        """)
-    framing_result = detect_bias_openai(title_to_display, text_content) # GPT 프레이밍 분석 함수 호출
+        st.markdown(""" **주의: AI 기반 프레이밍 분석 (GPT)**\n\n* 본 분석은 GPT 모델에 의해 수행되었으며, 완벽성을 보장하지 않습니다.\n* AI는 데이터와 학습 방식에 따라 편향된 결과를 제시할 수도 있습니다.\n* 제공된 분석은 참고 자료로 활용하시고, 최종적인 판단은 사용자의 책임하에 이루어져야 합니다. """)
+    framing_result = detect_bias_openai(title_to_display, text_content)
     st.info(framing_result)
-
 
 # --- Streamlit 앱 UI 구성 ---
 st.set_page_config(page_title="뉴스읽은척방지기 (하이브리드)", page_icon="🧐")
 st.title("🧐 뉴스읽은척방지기")
 st.write("키워드 검색 또는 URL 직접 입력으로 뉴스 기사를 AI와 함께 분석해보세요!")
-st.caption("본문 요약 및 키워드 추출은 Gemini AI, 프레이밍 분석은 OpenAI GPT를 사용합니다.") # 캡션 수정
+st.caption("본문 요약 및 키워드 추출은 Gemini AI, 프레이밍 분석은 OpenAI GPT를 사용합니다.")
 
+input_tab1, input_tab2 = st.tabs(["🗂️ 키워드/RSS피드로 뉴스 검색/분석", "🔗 URL 직접 입력/분석"])
 
-tab1, tab2 = st.tabs(["🗂️ 키워드로 뉴스 검색/분석", "🔗 URL 직접 입력/분석"])
+with input_tab1:
+    st.subheader("키워드 또는 RSS 피드 URL로 뉴스 찾아 분석하기")
+    search_type_tab1 = st.radio( "검색/입력 타입 선택:", ("키워드로 Google News 검색", "RSS 피드 URL 직접 입력"), key="search_type_tab1", horizontal=True)
 
-with tab1:
-    st.subheader("키워드로 뉴스 찾아 분석하기")
-    search_query_tab1 = st.text_input("검색할 키워드를 입력하세요:", placeholder="예: 애플 AI 전략", key="search_query_tab1")
+    if search_type_tab1 == "키워드로 Google News 검색":
+        input_label_tab1 = "검색할 키워드를 입력하세요:"
+        input_placeholder_tab1 = "예: 애플 AI 전략"
+    else: 
+        input_label_tab1 = "뉴스 RSS 피드의 전체 URL을 입력하세요:"
+        input_placeholder_tab1 = "예: https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml"
+    rss_or_keyword_input_tab1 = st.text_input(input_label_tab1, placeholder=input_placeholder_tab1, key="rss_or_keyword_input_tab1")
 
-    if st.button("🔍 뉴스 검색", key="search_button_tab1", use_container_width=True):
-        if not search_query_tab1:
-            st.warning("검색어를 입력해주세요.")
+    if st.button("📰 뉴스 목록 가져오기", key="fetch_list_button_tab1", use_container_width=True):
+        article_options_tab1 = {} 
+        if not rss_or_keyword_input_tab1:
+            st.warning("키워드 또는 RSS 피드 URL을 입력해주세요.")
         else:
-            st.session_state.search_results_tab1 = None 
-            google_news_rss_url = f"https://news.google.com/rss/search?q={search_query_tab1}&hl=ko&gl=KR&ceid=KR:ko"
-            try:
-                with st.spinner(f"'{search_query_tab1}' 관련 뉴스를 검색 중..."):
-                    feed = feedparser.parse(google_news_rss_url)
-                if not feed.entries:
-                    st.warning("검색 결과가 없습니다. 다른 검색어를 사용해보세요.")
+            feed_url_to_parse = None # 초기화
+            if search_type_tab1 == "RSS 피드 URL 직접 입력":
+                if not (rss_or_keyword_input_tab1.startswith('http://') or rss_or_keyword_input_tab1.startswith('https://')):
+                    st.warning("올바른 RSS 피드 URL 형식이 아닙니다. 'http://' 또는 'https://'로 시작해야 합니다.")
                 else:
-                    st.success(f"'{search_query_tab1}' 관련 뉴스 {len(feed.entries)}건을 찾았습니다. (최대 30개 표시)")
-                    st.session_state.search_results_tab1 = {entry.title: entry.link for entry in feed.entries[:30]}
-            except Exception as e:
-                st.error(f"뉴스 검색 중 오류 발생: {e}")
-                st.session_state.search_results_tab1 = None
-    
-    if 'search_results_tab1' in st.session_state and st.session_state.search_results_tab1:
+                    feed_url_to_parse = rss_or_keyword_input_tab1
+                feed_source_name = "입력하신 RSS 피드"
+            elif search_type_tab1 == "키워드로 Google News 검색":
+                feed_url_to_parse = f"https://news.google.com/rss/search?q={rss_or_keyword_input_tab1}&hl=ko&gl=KR&ceid=KR:ko"
+                feed_source_name = f"'{rss_or_keyword_input_tab1}' 관련 Google News"
+
+            if feed_url_to_parse: 
+                try:
+                    with st.spinner(f"{feed_source_name}에서 뉴스를 가져오는 중..."):
+                        feed = feedparser.parse(feed_url_to_parse)
+                    if feed.entries:
+                        for entry in feed.entries[:30]: 
+                            if hasattr(entry, 'title') and hasattr(entry, 'link'):
+                                article_options_tab1[entry.title] = entry.link
+                        if article_options_tab1:
+                             st.success(f"{feed_source_name}에서 {len(article_options_tab1)}건의 기사 제목을 찾았습니다.")
+                        else:
+                            st.warning(f"{feed_source_name}에서 기사를 찾을 수 없거나, 기사 형식이 올바르지 않습니다.")
+                    else:
+                        st.warning(f"{feed_source_name}에서 기사를 찾을 수 없습니다.")
+                except Exception as e:
+                    st.error(f"{search_type_tab1} 처리 중 오류 발생: {e}")
+        
+        if article_options_tab1:
+            st.session_state.article_options_for_analysis_tab1 = article_options_tab1
+        else: 
+            if 'article_options_for_analysis_tab1' in st.session_state:
+                del st.session_state.article_options_for_analysis_tab1
+
+    if 'article_options_for_analysis_tab1' in st.session_state and st.session_state.article_options_for_analysis_tab1:
         selected_title_tab1 = st.selectbox(
             "분석할 기사를 선택하세요:",
-            options=list(st.session_state.search_results_tab1.keys()),
-            index=None, 
-            placeholder="검색된 뉴스 목록에서 기사를 선택하세요...",
-            key="searched_article_selectbox_tab1"
+            options=list(st.session_state.article_options_for_analysis_tab1.keys()),
+            index=None,
+            placeholder="목록에서 기사를 선택하세요...",
+            key="selectbox_tab1"
         )
-        if selected_title_tab1 and st.button("👆 선택한 뉴스 분석하기", key="analyze_searched_button_tab1", use_container_width=True):
-            selected_url_tab1 = st.session_state.search_results_tab1[selected_title_tab1]
+        if selected_title_tab1 and st.button("👆 선택한 뉴스 분석하기", key="analyze_selected_button_tab1", use_container_width=True):
+            url_to_analyze = st.session_state.article_options_for_analysis_tab1[selected_title_tab1]
             st.info(f"선택한 기사 분석 중: {selected_title_tab1}")
             try:
                 with st.spinner(f"'{selected_title_tab1}' 기사를 가져와 AI가 분석 중입니다..."):
-                    article = Article(selected_url_tab1, language='ko')
+                    article = Article(url_to_analyze, language='ko') 
                     article.download()
                     article.parse()
                     if not article.title or not article.text or len(article.text) < 50:
                         st.error("선택한 기사의 제목이나 본문을 가져오지 못했거나 내용이 너무 짧습니다.")
                     else:
-                        display_article_analysis_content(article.title, article.text, selected_url_tab1)
+                        display_article_analysis_content(article.title, article.text, url_to_analyze) 
             except Exception as e:
                 st.error(f"선택한 기사 처리 중 오류 발생: {e}")
 
-with tab2:
+with input_tab2:
     st.subheader("URL로 직접 뉴스 분석하기")
     url_direct_input_tab2 = st.text_input("분석할 뉴스 기사의 전체 URL을 입력해주세요:", placeholder="예: https://www.example-news.com/news/article123", key="url_direct_input_tab2")
 
@@ -280,57 +275,3 @@ with tab2:
                 st.error(f"URL 기사 처리 중 오류 발생: {e}")
                 print(f"전체 오류: {e}") 
                 st.caption("URL을 확인하시거나, 다른 기사를 시도해보세요. 일부 웹사이트는 외부 접근을 통한 기사 수집을 허용하지 않을 수 있습니다.")
-
-# --- RSS 피드 목록 로드 함수 ---
-@st.cache_data # CSV 로딩 결과를 캐시하여 앱 성능 향상
-def load_rss_feeds_from_csv(file_path="feed_specs.csv"): # 기본 파일명을 지정
-    # Streamlit 앱의 루트 디렉토리를 기준으로 파일 경로를 구성할 수 있습니다.
-    # 또는 절대 경로를 사용하거나, 파일이 스크립트와 같은 위치에 있다고 가정합니다.
-    # 정확한 상대 경로는 GitHub 저장소 구조에 따라 달라질 수 있습니다.
-    # 만약 스크립트와 같은 폴더에 CSV 파일이 있다면:
-    # csv_file_path = os.path.join(os.path.dirname(__file__), file_path)
-    # 위 방식은 Streamlit Cloud에서 잘 작동하지 않을 수 있으므로,
-    # 보통은 스크립트와 같은 레벨에 파일을 두고 직접 파일명을 사용합니다.
-
-    try:
-        # try 다음 줄부터는 이렇게 안으로 한 단계 들여쓰기 해주세요.
-        df = pd.read_csv(file_path, encoding="cp949")
-        return df # 성공 시 df 반환
-    except UnicodeDecodeError:
-        # cp949로도 실패하면 euc-kr 시도
-        try:
-            # 여기도 마찬가지로 안으로 들여쓰기
-            df = pd.read_csv(file_path, encoding="euc-kr")
-            return df # 성공 시 df 반환
-        except UnicodeDecodeError:
-            st.error(f"'{file_path}' 파일의 인코딩을 'utf-8', 'cp949', 'euc-kr'로 읽는 데 모두 실패했습니다. 파일 인코딩을 확인해주세요.")
-            return None # 모든 시도 실패 시 None 반환
-        except Exception as e_inner: 
-            st.error(f"CSV 파일을 'euc-kr' 인코딩으로 읽는 중 오류 발생: {e_inner}")
-            return None
-    except FileNotFoundError: # FileNotFoundError는 UnicodeDecodeError보다 먼저 또는 별도로 처리하는 것이 좋습니다.
-        st.error(f"'{file_path}' 파일을 찾을 수 없습니다. GitHub 저장소에 파일이 올바르게 업로드되었는지, 파일 경로가 정확한지 확인해주세요.")
-        return None
-    except Exception as e_outer: 
-        st.error(f"CSV 파일을 'cp949' 또는 다른 방식으로 읽는 중 오류 발생: {e_outer}")
-        return None
-
-# --- 앱의 메인 로직에서 CSV 데이터 사용 ---
-# 예: 앱 시작 시 또는 특정 기능 실행 시 RSS 피드 목록 로드
-df_rss_list = load_rss_feeds_from_csv() # 기본 파일명 "knews_rss.csv" 사용
-
-if df_rss_list is not None:
-    # 이제 df_rss_list (Pandas DataFrame)를 사용하여 UI를 만들 수 있습니다.
-    # 예: 언론사 목록을 selectbox로 만들기
-    # publishers = df_rss_list['publisher'].unique() # 'publisher'는 CSV 파일의 실제 언론사 이름 컬럼명으로 변경
-    # selected_publisher = st.selectbox("언론사를 선택하세요:", publishers)
-
-    # 선택된 언론사에 해당하는 RSS URL 목록을 다른 selectbox로 보여주기 등
-    # if selected_publisher:
-    #     publisher_feeds = df_rss_list[df_rss_list['publisher'] == selected_publisher]
-    #     feed_titles_urls = {row['title']: row['url'] for index, row in publisher_feeds.iterrows()} # 'title', 'url'도 실제 컬럼명으로
-    #     selected_feed_title = st.selectbox("피드를 선택하세요:", list(feed_titles_urls.keys()))
-    #     if selected_feed_title:
-    #         rss_url_to_use = feed_titles_urls[selected_feed_title]
-    #         # 이 rss_url_to_use를 feedparser로 분석...
-    pass # 실제 UI 로직은 여기에 구현
