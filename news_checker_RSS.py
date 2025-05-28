@@ -1,4 +1,6 @@
 import streamlit as st
+import pandas as pd
+import os # 파일 경로 작업을 위해 추가
 from newspaper import Article
 # from sentence_transformers import SentenceTransformer, util # <<<<<<<<<<< 일단 주석 처리
 import openai # OpenAI 라이브러리
@@ -278,3 +280,46 @@ with tab2:
                 st.error(f"URL 기사 처리 중 오류 발생: {e}")
                 print(f"전체 오류: {e}") 
                 st.caption("URL을 확인하시거나, 다른 기사를 시도해보세요. 일부 웹사이트는 외부 접근을 통한 기사 수집을 허용하지 않을 수 있습니다.")
+
+# --- RSS 피드 목록 로드 함수 ---
+@st.cache_data # CSV 로딩 결과를 캐시하여 앱 성능 향상
+def load_rss_feeds_from_csv(file_path="knews_rss.csv"): # 기본 파일명을 지정
+    # Streamlit 앱의 루트 디렉토리를 기준으로 파일 경로를 구성할 수 있습니다.
+    # 또는 절대 경로를 사용하거나, 파일이 스크립트와 같은 위치에 있다고 가정합니다.
+    # 정확한 상대 경로는 GitHub 저장소 구조에 따라 달라질 수 있습니다.
+    # 만약 스크립트와 같은 폴더에 CSV 파일이 있다면:
+    # csv_file_path = os.path.join(os.path.dirname(__file__), file_path)
+    # 위 방식은 Streamlit Cloud에서 잘 작동하지 않을 수 있으므로,
+    # 보통은 스크립트와 같은 레벨에 파일을 두고 직접 파일명을 사용합니다.
+
+    try:
+        df = pd.read_csv(file_path)
+        # 필요한 경우 여기서 데이터 전처리 (예: 빈 값 제거, 특정 열만 선택 등)
+        # st.success(f"'{file_path}'에서 RSS 피드 목록을 성공적으로 불러왔습니다.")
+        return df
+    except FileNotFoundError:
+        st.error(f"'{file_path}' 파일을 찾을 수 없습니다. GitHub 저장소에 파일이 올바르게 업로드되었는지, 파일 경로가 정확한지 확인해주세요.")
+        return None
+    except Exception as e:
+        st.error(f"CSV 파일을 읽는 중 오류 발생: {e}")
+        return None
+
+# --- 앱의 메인 로직에서 CSV 데이터 사용 ---
+# 예: 앱 시작 시 또는 특정 기능 실행 시 RSS 피드 목록 로드
+df_rss_list = load_rss_feeds_from_csv() # 기본 파일명 "knews_rss.csv" 사용
+
+if df_rss_list is not None:
+    # 이제 df_rss_list (Pandas DataFrame)를 사용하여 UI를 만들 수 있습니다.
+    # 예: 언론사 목록을 selectbox로 만들기
+    # publishers = df_rss_list['publisher'].unique() # 'publisher'는 CSV 파일의 실제 언론사 이름 컬럼명으로 변경
+    # selected_publisher = st.selectbox("언론사를 선택하세요:", publishers)
+
+    # 선택된 언론사에 해당하는 RSS URL 목록을 다른 selectbox로 보여주기 등
+    # if selected_publisher:
+    #     publisher_feeds = df_rss_list[df_rss_list['publisher'] == selected_publisher]
+    #     feed_titles_urls = {row['title']: row['url'] for index, row in publisher_feeds.iterrows()} # 'title', 'url'도 실제 컬럼명으로
+    #     selected_feed_title = st.selectbox("피드를 선택하세요:", list(feed_titles_urls.keys()))
+    #     if selected_feed_title:
+    #         rss_url_to_use = feed_titles_urls[selected_feed_title]
+    #         # 이 rss_url_to_use를 feedparser로 분석...
+    pass # 실제 UI 로직은 여기에 구현

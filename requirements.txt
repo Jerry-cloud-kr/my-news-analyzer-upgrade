@@ -5,3 +5,4 @@ openai
 google-generativeai
 feedparser
 lxml[html_clean]
+pandas
