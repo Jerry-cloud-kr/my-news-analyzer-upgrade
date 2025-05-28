@@ -292,7 +292,7 @@ elif st.session_state.current_input_method == "URL 직접 입력": # input_metho
                     st.write(f"**`article.title` (파싱 후):** {article.title}")
                     st.write(f"**`len(article.text)` (파싱 후):** {len(article.text)}")
                     if article.text:
-                        st.write(f"**`article.text` (파싱 후 앞 100자):** {article.text[:100].replace( : ,  ).replace( : ,  )}...")
+                        st.write(f"**7. `newspaper3k`로 파싱된 텍스트 (앞 100자):** `{article.text[:100].replace(':', '')}...`")
                     st.markdown("--- 디버깅 정보 끝 ---")
                     # --- 디버깅 로그 추가 끝 ---
 
