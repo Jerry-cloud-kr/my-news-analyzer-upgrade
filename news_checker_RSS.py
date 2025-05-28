@@ -225,7 +225,7 @@ st.write("키워드 검색 또는 URL 직접 입력으로 뉴스 기사를 AI와
 st.caption("본문 요약 및 키워드 추출은 Gemini AI, 프레이밍 분석은 OpenAI GPT, 유사도 분석은 SentenceTransformer를 사용합니다.")
 
 
-tab1, tab2 = st.tabs(["🗂️ 키워드/RSS피드로 뉴스 검색/분석", "🔗 URL 직접 입력/분석"])
+input_tab1, input_tab2 = st.tabs(["🗂️ 키워드/RSS피드로 뉴스 검색/분석", "🔗 URL 직접 입력/분석"])
 
 with input_tab1:
     st.subheader("키워드 또는 RSS 피드 URL로 뉴스 찾아 분석하기")
