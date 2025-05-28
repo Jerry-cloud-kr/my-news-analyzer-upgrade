@@ -287,11 +287,8 @@ if st.session_state.current_input_method == "키워드로 Google News 검색":
                 st.markdown(f"**선택된 기사 (클릭 시 원문 이동):**")
                 # 기사 제목을 클릭 가능한 링크로 만듭니다. 새 창에서 열리도록 target="_blank" 추가.
                 st.markdown(f"### [{selected_article_data['original_title']}]({selected_article_data['url']})", unsafe_allow_html=True)
-                
-                st.markdown(f"**표시된 기사 원문 URL (참고용):**")
-                st.code(selected_article_data['url']) # URL 텍스트도 여전히 보여줘서 복사할 수 있게 합니다.
-                
-                st.info("👆 위 기사 제목 링크를 클릭하여 원문을 확인하신 후, 해당 URL을 복사하거나 위의 URL 텍스트를 복사하여 'URL 직접 입력' 탭에 붙여넣고 분석을 시작하세요.")
+                                
+                st.info("👆 위 기사 제목 링크를 클릭하여 원문을 확인하신 후, 해당 URL을 복사하여 'URL 직접 입력' 탭에 붙여넣고 분석을 시작하세요.")
                 # --- 여기까지 핵심 변경 부분 ---
         st.markdown("---")
 
