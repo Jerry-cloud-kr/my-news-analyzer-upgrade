@@ -283,7 +283,7 @@ with tab2:
 
 # --- RSS 피드 목록 로드 함수 ---
 @st.cache_data # CSV 로딩 결과를 캐시하여 앱 성능 향상
-def load_rss_feeds_from_csv(file_path="knews_rss.csv"): # 기본 파일명을 지정
+def load_rss_feeds_from_csv(file_path="feed_specs.csv"): # 기본 파일명을 지정
     # Streamlit 앱의 루트 디렉토리를 기준으로 파일 경로를 구성할 수 있습니다.
     # 또는 절대 경로를 사용하거나, 파일이 스크립트와 같은 위치에 있다고 가정합니다.
     # 정확한 상대 경로는 GitHub 저장소 구조에 따라 달라질 수 있습니다.
