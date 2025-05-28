@@ -209,7 +209,7 @@ if selected_input_method != st.session_state.current_input_method:
     # 검색 결과가 남아있는 것을 방지하기 위해 이전 검색 결과 초기화
     if 'fetched_articles_for_selection_display' in st.session_state:
         del st.session_state.fetched_articles_for_selection_display
-    st.experimental_rerun() # 입력 방식 변경 시 앱을 한번 재실행하여 UI를 깨끗하게 정리
+    st.rerun() # 입력 방식 변경 시 앱을 한번 재실행하여 UI를 깨끗하게 정리
 
 if st.session_state.current_input_method == "키워드로 Google News 검색":
     st.subheader("🗂️ 키워드로 뉴스 찾아보기")
